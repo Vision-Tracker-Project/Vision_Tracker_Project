@@ -1,0 +1,8 @@
+# 컴파일 목적 파일(Object file)
+*.o
+
+# 덤프 파일 및 실행 바이너리 (필요시 제외)
+__dump*.txt
+*.bin
+*.elf
+*.map
