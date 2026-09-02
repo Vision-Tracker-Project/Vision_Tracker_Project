@@ -9,6 +9,8 @@ AI/
 ├── sample.py
 ├── requirements.txt
 ├── INSTALL.md
+├── ARCHITECTURE.md
+├── TESTING.md
 ├── YUNET.md
 ├── SFACE.md
 ├── UART.md

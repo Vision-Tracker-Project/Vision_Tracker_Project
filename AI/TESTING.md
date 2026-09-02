@@ -47,7 +47,7 @@ test_default_state (...) ... ok
 test_detect_converts_opencv_output (...) ... ok
 test_extract_returns_128d_memory_vector (...) ... ok
 
-Ran 10 tests in 0.010s
+Ran 18 tests in 0.010s
 OK (skipped=1)
 ```
 
