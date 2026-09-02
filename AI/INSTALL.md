@@ -107,6 +107,8 @@ fuser /dev/video0
 
 카메라 없이 단위 테스트와 문법 검사 가능.
 
+처음 테스트를 실행하거나 기능별 실행 방법이 필요한 경우 `TESTING.md` 참고.
+
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q sample.py src tests
