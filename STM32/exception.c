@@ -11,13 +11,11 @@ void _Invalid_ISR(void)
 
 void USART2_IRQHandler(void)
 {
-    // 수신 버퍼(DR)에 데이터가 들어왔는지 확인 (RXNE 비트)
-    if (USART2->SR & (1 << 5))
+    // RXNE(수신 데이터 준비)인 경우에만 DR을 읽습니다.
+    // DR을 읽으면 RXNE가 클리어됩니다.
+    if (Macro_Check_Bit_Set(USART2->SR, 5))
     {
-        // 1. 데이터 레지스터(DR)를 읽으면 수신 인터럽트 플래그가 자동 클리어됩니다.
-        char rx_data = (char)(USART2->DR & 0xFF);
-
-        // 2. (테스트용) 받은 데이터를 그대로 젯슨으로 다시 반사 (에코)
-        Uart2_Send_Byte(rx_data);
+        Uart_Data = (unsigned char)(USART2->DR & 0xFF);
+        Uart_Data_In = 1;
     }
 }
