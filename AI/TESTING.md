@@ -27,7 +27,8 @@ tests/
 ├── test_yunet_detector.py
 ├── test_sface_extractor.py
 ├── test_face_tracker.py
-└── test_uart_protocol.py
+├── test_uart_protocol.py
+└── test_frame_buffer.py
 ```
 
 | 파일 | 확인 내용 |
@@ -37,6 +38,7 @@ tests/
 | `test_sface_extractor.py` | 모델 누락 오류, 128차원 벡터 추출, 잘못된 차원 검사 |
 | `test_face_tracker.py` | 추적 대상 선택, 중심 무동작 영역, 각도 변경과 제한 |
 | `test_uart_protocol.py` | 6바이트 패킷, 체크섬, PAN/TILT 연속 전송 |
+| `test_frame_buffer.py` | 프레임 추가, 시간 제한 제거, 시점 탐색, 초기화 |
 
 ## 결과 읽는 방법
 
@@ -47,7 +49,7 @@ test_default_state (...) ... ok
 test_detect_converts_opencv_output (...) ... ok
 test_extract_returns_128d_memory_vector (...) ... ok
 
-Ran 18 tests in 0.010s
+Ran 24 tests in 0.020s
 OK (skipped=1)
 ```
 
@@ -96,6 +98,14 @@ python3 -m unittest tests.test_uart_protocol -v
 ```
 
 UART 테스트는 가짜 직렬 포트를 사용하므로 STM32 연결 없이 실행 가능.
+
+프레임 버퍼 테스트:
+
+```bash
+python3 -m unittest tests.test_frame_buffer -v
+```
+
+프레임 버퍼 테스트는 카메라와 GUI 없이 실행 가능.
 
 ## 클래스 또는 테스트 하나만 실행
 

@@ -2,7 +2,7 @@
 
 ## 현재 구현 범위
 
-USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출, 가장 큰 얼굴 선택, 중심 좌표 필터링, 팬·틸트 각도 계산, Jetson UART 전송까지 구현. 특징 벡터는 프레임 처리 중 메모리에서만 사용하며 파일·DB 저장은 미수행. 얼굴 등록 및 유사도 비교는 미구현 상태.
+USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출, 가장 큰 얼굴 선택, 중심 좌표 필터링, 팬·틸트 각도 계산, Jetson UART 전송, 최근 60초 프레임 다시보기까지 구현. 특징 벡터와 다시보기 프레임은 메모리에서만 사용하며 파일·DB 저장은 미수행. 얼굴 등록 및 유사도 비교는 미구현 상태.
 
 ```text
 AI/
@@ -14,6 +14,7 @@ AI/
 ├── YUNET.md
 ├── SFACE.md
 ├── UART.md
+├── REPLAY.md
 ├── models/
 │   ├── face_detection_yunet_2023mar.onnx
 │   └── face_recognition_sface_2021dec.onnx
@@ -25,6 +26,8 @@ AI/
 │   ├── tracking/face_tracker.py
 │   ├── communication/protocol.py
 │   ├── communication/uart_sender.py
+│   ├── buffer/frame_buffer.py
+│   ├── buffer/frame_buffer_worker.py
 │   ├── workers/video_worker.py
 │   └── ui/main_window.py
 └── tests/
@@ -32,7 +35,8 @@ AI/
     ├── test_yunet_detector.py
     ├── test_sface_extractor.py
     ├── test_face_tracker.py
-    └── test_uart_protocol.py
+    ├── test_uart_protocol.py
+    └── test_frame_buffer.py
 ```
 
 ## Jetson 설치
@@ -96,7 +100,7 @@ source .venv/bin/activate
 python3 main.py
 ```
 
-`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 팬·틸트 추적, UART 전송 시작. 화면에서 얼굴 박스, 선택 대상, 중심 좌표, 목표 각도, UART 상태와 패킷 확인 가능. `카메라 OFF` 선택 시 처리 중지, UART 연결 종료 및 카메라 해제.
+`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 팬·틸트 추적, UART 전송, 최근 프레임 저장 시작. 화면에서 얼굴 박스, 선택 대상, 중심 좌표, 목표 각도, UART 상태와 패킷 확인 가능. 시간 슬라이더로 최근 60초 확인 가능. `카메라 OFF` 선택 시 처리 중지, UART 연결 종료 및 카메라 해제.
 
 기본 UART 장치는 `/dev/ttyUSB0`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
 
@@ -105,6 +109,8 @@ VISION_UART_PORT=/dev/ttyTHS1 python3 main.py
 ```
 
 패킷과 추적 설정은 `UART.md` 참고.
+
+최근 프레임 다시보기 설정은 `REPLAY.md` 참고.
 
 ## 카메라 확인
 
