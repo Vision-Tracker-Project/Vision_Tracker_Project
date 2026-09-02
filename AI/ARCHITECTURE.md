@@ -12,6 +12,7 @@ AI/
 │   ├── tracking/             # 추적 얼굴 선택과 팬·틸트 각도 계산
 │   ├── communication/        # 6바이트 패킷 생성과 UART 전송
 │   ├── buffer/               # 최근 60초 JPEG 프레임 보관
+│   ├── capture/              # 실시간·다시보기 프레임 PNG 저장
 │   ├── workers/              # 카메라·AI·통신 백그라운드 처리
 │   └── ui/                   # 영상과 처리 상태 표시
 ├── models/                   # YuNet·SFace ONNX 모델
