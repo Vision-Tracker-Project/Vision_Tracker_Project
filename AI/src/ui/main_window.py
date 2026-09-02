@@ -17,6 +17,7 @@ from src.config import (
     CAMERA_INDEX,
     DEFAULT_FRAME_HEIGHT,
     DEFAULT_FRAME_WIDTH,
+    SFACE_MODEL_PATH,
     WINDOW_TITLE,
     YUNET_MODEL_PATH,
     YUNET_NMS_THRESHOLD,
@@ -24,6 +25,7 @@ from src.config import (
     YUNET_TOP_K,
 )
 from src.detection.yunet_detector import YuNetDetector, YuNetError
+from src.recognition.sface_extractor import SFaceError, SFaceExtractor
 from src.workers.video_worker import VideoWorker
 
 
@@ -50,9 +52,11 @@ class MainWindow(QMainWindow):
         status_layout = QHBoxLayout()
         self.status_label = QLabel("상태: 정지됨")
         self.face_count_label = QLabel("검출 얼굴: 0")
+        self.embedding_label = QLabel("SFace: 대기")
         self.fps_label = QLabel("출력 FPS: 0.0")
         status_layout.addWidget(self.status_label, stretch=1)
         status_layout.addWidget(self.face_count_label)
+        status_layout.addWidget(self.embedding_label)
         status_layout.addWidget(self.fps_label)
         layout.addLayout(status_layout)
 
@@ -82,7 +86,8 @@ class MainWindow(QMainWindow):
                 nms_threshold=YUNET_NMS_THRESHOLD,
                 top_k=YUNET_TOP_K,
             )
-        except YuNetError as error:
+            extractor = SFaceExtractor(model_path=SFACE_MODEL_PATH)
+        except (YuNetError, SFaceError) as error:
             self._on_camera_error(str(error))
             return
 
@@ -91,11 +96,12 @@ class MainWindow(QMainWindow):
             width=DEFAULT_FRAME_WIDTH,
             height=DEFAULT_FRAME_HEIGHT,
         )
-        self.worker = VideoWorker(camera, detector, self)
+        self.worker = VideoWorker(camera, detector, extractor, self)
         self.worker.frame_ready.connect(self._display_frame)
         self.worker.camera_opened.connect(self._on_camera_opened)
         self.worker.fps_updated.connect(self._on_fps_updated)
         self.worker.face_count_updated.connect(self._on_face_count_updated)
+        self.worker.embedding_status_updated.connect(self._on_embedding_status_updated)
         self.worker.error_occurred.connect(self._on_camera_error)
         self.worker.capture_stopped.connect(self._on_capture_stopped)
         self.worker.finished.connect(self._on_worker_finished)
@@ -147,6 +153,17 @@ class MainWindow(QMainWindow):
     def _on_face_count_updated(self, count: int) -> None:
         self.face_count_label.setText(f"검출 얼굴: {count}")
 
+    def _on_embedding_status_updated(
+        self, count: int, dimension: int, l2_norm: float, elapsed_ms: float
+    ) -> None:
+        if count == 0:
+            self.embedding_label.setText("SFace: 얼굴 대기")
+            return
+        self.embedding_label.setText(
+            f"SFace: OK {count}명 / {dimension}D / "
+            f"Norm {l2_norm:.2f} / {elapsed_ms:.1f}ms"
+        )
+
     def _on_camera_error(self, message: str) -> None:
         self.status_label.setText(f"상태: 오류 — {message}")
         self.video_label.setText(message)
@@ -155,6 +172,7 @@ class MainWindow(QMainWindow):
         if not self.status_label.text().startswith("상태: 오류"):
             self.status_label.setText("상태: 정지됨")
         self.face_count_label.setText("검출 얼굴: 0")
+        self.embedding_label.setText("SFace: 대기")
         self.fps_label.setText("출력 FPS: 0.0")
         self._set_running_state(False)
 

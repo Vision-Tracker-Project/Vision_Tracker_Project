@@ -8,6 +8,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from src.camera.camera_capture import CameraCapture, CameraError
 from src.detection.yunet_detector import YuNetDetector, YuNetError
+from src.recognition.sface_extractor import SFaceError, SFaceExtractor
 
 
 class VideoWorker(QThread):
@@ -17,15 +18,21 @@ class VideoWorker(QThread):
     camera_opened = pyqtSignal(object)
     fps_updated = pyqtSignal(float)
     face_count_updated = pyqtSignal(int)
+    embedding_status_updated = pyqtSignal(int, int, float, float)
     error_occurred = pyqtSignal(str)
     capture_stopped = pyqtSignal()
 
     def __init__(
-        self, camera: CameraCapture, detector: YuNetDetector, parent=None
+        self,
+        camera: CameraCapture,
+        detector: YuNetDetector,
+        extractor: SFaceExtractor,
+        parent=None,
     ) -> None:
         super().__init__(parent)
         self.camera = camera
         self.detector = detector
+        self.extractor = extractor
         self._stop_event = threading.Event()
         self._pending_lock = threading.Lock()
         self._frame_pending = False
@@ -60,8 +67,21 @@ class VideoWorker(QThread):
                 # 아직 GUI가 이전 프레임을 처리 중이면 새 프레임을 버린다.
                 if self._reserve_frame_signal():
                     detections = self.detector.detect(frame)
+                    embeddings = [
+                        self.extractor.extract(frame, detection)
+                        for detection in detections
+                    ]
                     self.detector.draw(frame, detections)
                     self.face_count_updated.emit(len(detections))
+                    if embeddings:
+                        self.embedding_status_updated.emit(
+                            len(embeddings),
+                            embeddings[0].dimension,
+                            embeddings[0].l2_norm,
+                            sum(item.elapsed_ms for item in embeddings),
+                        )
+                    else:
+                        self.embedding_status_updated.emit(0, 0, 0.0, 0.0)
                     self.frame_ready.emit(frame)
                     output_timestamps.append(now)
                     while output_timestamps and now - output_timestamps[0] > 1.0:
@@ -74,6 +94,8 @@ class VideoWorker(QThread):
         except CameraError as error:
             self.error_occurred.emit(str(error))
         except YuNetError as error:
+            self.error_occurred.emit(str(error))
+        except SFaceError as error:
             self.error_occurred.emit(str(error))
         except Exception as error:
             self.error_occurred.emit(f"예상하지 못한 카메라 오류: {error}")
