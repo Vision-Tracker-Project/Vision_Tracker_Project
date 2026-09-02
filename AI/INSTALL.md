@@ -6,7 +6,7 @@ USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출, 가장 �
 
 ```text
 AI/
-├── sample.py
+├── main.py
 ├── requirements.txt
 ├── INSTALL.md
 ├── ARCHITECTURE.md
@@ -93,7 +93,7 @@ ldd /usr/lib/aarch64-linux-gnu/qt5/plugins/platforms/libqxcb.so | grep "not foun
 ```bash
 cd ~/work/Vision_Tracker_Project/AI
 source .venv/bin/activate
-python3 sample.py
+python3 main.py
 ```
 
 `카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 팬·틸트 추적, UART 전송 시작. 화면에서 얼굴 박스, 선택 대상, 중심 좌표, 목표 각도, UART 상태와 패킷 확인 가능. `카메라 OFF` 선택 시 처리 중지, UART 연결 종료 및 카메라 해제.
@@ -101,7 +101,7 @@ python3 sample.py
 기본 UART 장치는 `/dev/ttyUSB0`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
 
 ```bash
-VISION_UART_PORT=/dev/ttyTHS1 python3 sample.py
+VISION_UART_PORT=/dev/ttyTHS1 python3 main.py
 ```
 
 패킷과 추적 설정은 `UART.md` 참고.
@@ -128,7 +128,7 @@ fuser /dev/video0
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m compileall -q sample.py src tests
+python3 -m compileall -q main.py src tests
 ```
 
 실제 카메라 테스트는 명시적으로 활성화할 때만 실행.

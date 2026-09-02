@@ -141,7 +141,7 @@ python3 -m src.camera.camera_checker
 테스트와 별도로 전체 Python 파일의 문법 및 import 가능한 바이트코드 생성 여부 확인 가능.
 
 ```bash
-python3 -m compileall -q sample.py src tests
+python3 -m compileall -q main.py src tests
 ```
 
 출력이 없으면 문법 검사 통과. 오류가 있으면 해당 파일과 줄 번호 출력.
@@ -152,7 +152,7 @@ python3 -m compileall -q sample.py src tests
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m compileall -q sample.py src tests
+python3 -m compileall -q main.py src tests
 ```
 
 커밋 전에도 같은 두 명령 실행 권장.

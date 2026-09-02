@@ -2,7 +2,7 @@
 
 ```text
 AI/
-├── sample.py                 # 프로그램 실행 진입점
+├── main.py                   # 프로그램 실행 진입점
 ├── src/
 │   ├── config.py             # 카메라, 모델, 추적, UART 설정
 │   ├── main.py               # PyQt 애플리케이션 생성

@@ -1,4 +1,4 @@
-"""USB 카메라 GUI 실행 진입점: ``python3 AI/sample.py``."""
+"""USB 카메라 GUI 실행 진입점: ``python3 AI/main.py``."""
 
 from src.main import main
 

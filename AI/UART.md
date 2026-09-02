@@ -68,7 +68,7 @@ PAN과 TILT 값 변경 시 6바이트 패킷 두 개를 합친 12바이트를 �
 장치 경로가 다른 경우 실행 전에 환경 변수 지정.
 
 ```bash
-VISION_UART_PORT=/dev/ttyTHS1 python3 sample.py
+VISION_UART_PORT=/dev/ttyTHS1 python3 main.py
 ```
 
 USB-UART 장치 확인:
