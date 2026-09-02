@@ -8,10 +8,12 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
+from src.buffer.frame_buffer_worker import FrameBufferWorker
 from src.camera.camera_capture import CameraCapture
 from src.communication.uart_sender import UartSender
 from src.config import (
@@ -22,6 +24,8 @@ from src.config import (
     PAN_INVERTED,
     PAN_MAX_ANGLE,
     PAN_MIN_ANGLE,
+    REPLAY_BUFFER_SECONDS,
+    REPLAY_JPEG_QUALITY,
     SERVO_SEND_INTERVAL_SECONDS,
     SFACE_MODEL_PATH,
     TILT_INITIAL_ANGLE,
@@ -52,10 +56,20 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.worker = None
-        self._last_image = None
+        self._latest_live_image = None
+        self._displayed_image = None
+        self._is_replay_mode = False
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(1100, 760)
         self._build_ui()
+        self.frame_buffer_worker = FrameBufferWorker(
+            max_duration_seconds=REPLAY_BUFFER_SECONDS,
+            jpeg_quality=REPLAY_JPEG_QUALITY,
+            parent=self,
+        )
+        self.frame_buffer_worker.buffer_updated.connect(self._on_buffer_updated)
+        self.frame_buffer_worker.error_occurred.connect(self._on_buffer_error)
+        self.frame_buffer_worker.start()
         self._set_running_state(False)
 
     def _build_ui(self) -> None:
@@ -67,6 +81,24 @@ class MainWindow(QMainWindow):
         self.video_label.setMinimumSize(640, 360)
         self.video_label.setStyleSheet("background-color: #151515; color: #dddddd;")
         layout.addWidget(self.video_label, stretch=1)
+
+        replay_layout = QHBoxLayout()
+        self.timeline_slider = QSlider(Qt.Horizontal)
+        self.timeline_slider.setRange(0, 0)
+        self.timeline_slider.setEnabled(False)
+        self.timeline_slider.setTracking(True)
+        self.timeline_slider.sliderPressed.connect(self._begin_replay)
+        self.timeline_slider.valueChanged.connect(self._on_timeline_changed)
+        self.replay_status_label = QLabel("다시보기: 버퍼 대기")
+        self.live_button = QPushButton("실시간 복귀")
+        self.live_button.setEnabled(False)
+        self.live_button.clicked.connect(self._return_to_live)
+        replay_layout.addWidget(QLabel("-60초"))
+        replay_layout.addWidget(self.timeline_slider, stretch=1)
+        replay_layout.addWidget(QLabel("현재"))
+        replay_layout.addWidget(self.replay_status_label)
+        replay_layout.addWidget(self.live_button)
+        layout.addLayout(replay_layout)
 
         status_layout = QHBoxLayout()
         self.status_label = QLabel("상태: 정지됨")
@@ -113,6 +145,9 @@ class MainWindow(QMainWindow):
         if self.worker is not None and self.worker.isRunning():
             return
 
+        self._return_to_live()
+        self.frame_buffer_worker.clear()
+
         try:
             detector = YuNetDetector(
                 model_path=YUNET_MODEL_PATH,
@@ -153,6 +188,7 @@ class MainWindow(QMainWindow):
             extractor,
             tracker,
             uart_sender,
+            frame_sink=self.frame_buffer_worker,
             send_interval=SERVO_SEND_INTERVAL_SECONDS,
             uart_retry_interval=UART_RETRY_INTERVAL_SECONDS,
             parent=self,
@@ -187,27 +223,84 @@ class MainWindow(QMainWindow):
 
     def _display_frame(self, frame) -> None:
         try:
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            height, width, channels = rgb_frame.shape
-            self._last_image = QImage(
-                rgb_frame.data,
-                width,
-                height,
-                channels * width,
-                QImage.Format_RGB888,
-            ).copy()
-            self._render_last_image()
+            self._latest_live_image = self._frame_to_image(frame)
+            if not self._is_replay_mode:
+                self._displayed_image = self._latest_live_image
+                self._render_displayed_image()
         finally:
             if self.worker is not None:
                 self.worker.mark_frame_consumed()
 
-    def _render_last_image(self) -> None:
-        if self._last_image is None:
+    @staticmethod
+    def _frame_to_image(frame) -> QImage:
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        height, width, channels = rgb_frame.shape
+        return QImage(
+            rgb_frame.data,
+            width,
+            height,
+            channels * width,
+            QImage.Format_RGB888,
+        ).copy()
+
+    def _render_displayed_image(self) -> None:
+        if self._displayed_image is None:
             return
-        pixmap = QPixmap.fromImage(self._last_image).scaled(
+        pixmap = QPixmap.fromImage(self._displayed_image).scaled(
             self.video_label.size(), Qt.KeepAspectRatio, Qt.FastTransformation
         )
         self.video_label.setPixmap(pixmap)
+
+    def _begin_replay(self) -> None:
+        self._is_replay_mode = True
+        self.live_button.setEnabled(True)
+
+    def _on_timeline_changed(self, value: int) -> None:
+        if value == 0 and not self._is_replay_mode:
+            return
+        if value < 0:
+            self._is_replay_mode = True
+            self.live_button.setEnabled(True)
+
+        seconds_ago = max(0.0, -value / 1000.0)
+        frame = self.frame_buffer_worker.frame_seconds_ago(seconds_ago)
+        if frame is None:
+            return
+        self._displayed_image = self._frame_to_image(frame)
+        self._render_displayed_image()
+        self.replay_status_label.setText(f"다시보기: -{seconds_ago:.1f}초")
+
+    def _return_to_live(self) -> None:
+        self._is_replay_mode = False
+        self.timeline_slider.blockSignals(True)
+        self.timeline_slider.setValue(0)
+        self.timeline_slider.blockSignals(False)
+        self.live_button.setEnabled(False)
+        if self._latest_live_image is not None:
+            self._displayed_image = self._latest_live_image
+            self._render_displayed_image()
+        self.replay_status_label.setText("다시보기: 실시간")
+
+    def _on_buffer_updated(
+        self, duration_seconds: float, frame_count: int, total_bytes: int
+    ) -> None:
+        available_ms = min(
+            round(REPLAY_BUFFER_SECONDS * 1000), round(duration_seconds * 1000)
+        )
+        self.timeline_slider.setMinimum(-available_ms)
+        self.timeline_slider.setMaximum(0)
+        self.timeline_slider.setEnabled(frame_count > 1)
+        if not self._is_replay_mode:
+            self.timeline_slider.blockSignals(True)
+            self.timeline_slider.setValue(0)
+            self.timeline_slider.blockSignals(False)
+            self.replay_status_label.setText(
+                f"다시보기: 실시간 / {duration_seconds:.1f}초 / "
+                f"{frame_count}프레임 / {total_bytes / 1024 / 1024:.1f}MB"
+            )
+
+    def _on_buffer_error(self, message: str) -> None:
+        self.replay_status_label.setText(f"다시보기 오류: {message}")
 
     def _on_fps_updated(self, fps: float) -> None:
         self.fps_label.setText(f"출력 FPS: {fps:.1f}")
@@ -277,13 +370,19 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._render_last_image()
+        self._render_displayed_image()
 
     def closeEvent(self, event) -> None:
         if self.worker is not None and self.worker.isRunning():
             self.worker.request_stop()
             if not self.worker.wait(3000):
                 self.status_label.setText("상태: 카메라 스레드가 종료될 때까지 기다리는 중...")
+                event.ignore()
+                return
+        if self.frame_buffer_worker.isRunning():
+            self.frame_buffer_worker.request_stop()
+            if not self.frame_buffer_worker.wait(3000):
+                self.status_label.setText("상태: 버퍼 스레드가 종료될 때까지 기다리는 중...")
                 event.ignore()
                 return
         event.accept()

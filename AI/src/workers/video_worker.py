@@ -35,6 +35,7 @@ class VideoWorker(QThread):
         extractor: SFaceExtractor,
         tracker: FaceTracker,
         uart_sender: UartSender,
+        frame_sink=None,
         send_interval: float = 0.1,
         uart_retry_interval: float = 2.0,
         parent=None,
@@ -45,6 +46,7 @@ class VideoWorker(QThread):
         self.extractor = extractor
         self.tracker = tracker
         self.uart_sender = uart_sender
+        self.frame_sink = frame_sink
         self.send_interval = send_interval
         self.uart_retry_interval = uart_retry_interval
         self._stop_event = threading.Event()
@@ -149,6 +151,8 @@ class VideoWorker(QThread):
                         )
                     else:
                         self.embedding_status_updated.emit(0, 0, 0.0, 0.0)
+                    if self.frame_sink is not None:
+                        self.frame_sink.submit(frame, now)
                     self.frame_ready.emit(frame)
                     output_timestamps.append(now)
                     while output_timestamps and now - output_timestamps[0] > 1.0:
