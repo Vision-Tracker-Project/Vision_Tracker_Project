@@ -1,6 +1,7 @@
 # Jetson에서는 시스템 OpenCV/PyQt5를 재사용하도록 --system-site-packages를 사용합니다.
 numpy>=1.23
 opencv-python>=4.8
+pyserial>=3.5
 
 # PyPI는 Jetson ARM64용 PyQt5 wheel을 제공하지 않아 소스 빌드(qmake)가 시작됩니다.
 # ARM64에서는 INSTALL.md대로 Ubuntu의 python3-pyqt5 패키지를 사용합니다.
