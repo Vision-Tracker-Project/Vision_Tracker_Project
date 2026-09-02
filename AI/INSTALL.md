@@ -1,19 +1,25 @@
-# AI 카메라 GUI 설치 안내
+# AI 카메라·YuNet 설치 및 실행 안내
 
-## 1단계: USB 카메라 PyQt GUI
+## 현재 구현 단계
 
-현재 AI 모듈에는 Jetson Orin Nano의 USB 카메라 영상을 PyQt5 GUI에 실시간으로 표시하는 기능이 구현되어 있습니다. YuNet, SFace, 얼굴 인식 및 서보 제어는 아직 포함하지 않습니다.
+현재 AI 모듈에는 USB 카메라 영상 출력과 YuNet 얼굴 검출이 구현되어 있습니다. SFace, 얼굴 유사도 비교, 추적 대상 선택 및 STM32 제어는 아직 포함하지 않습니다. YuNet의 동작 방식은 `YUNET.md`를 참고합니다.
 
 ```text
 AI/
 ├── sample.py               # 실행 진입점
 ├── requirements.txt
+├── YUNET.md                # YuNet 얼굴 검출 설명
+├── models/
+│   └── face_detection_yunet_2023mar.onnx
 ├── src/
 │   ├── config.py
 │   ├── camera/camera_capture.py
+│   ├── detection/yunet_detector.py
 │   ├── workers/video_worker.py
 │   └── ui/main_window.py
-└── tests/test_camera_capture.py
+└── tests/
+    ├── test_camera_capture.py
+    └── test_yunet_detector.py
 ```
 
 ### 환경과 PyQt 선택
@@ -84,7 +90,7 @@ ldd /usr/lib/aarch64-linux-gnu/qt5/plugins/platforms/libqxcb.so | grep "not foun
 python3 sample.py
 ```
 
-카메라 번호와 해상도를 선택한 다음 **카메라 시작**을 누릅니다. 정지한 뒤 다른 설정으로 다시 시작할 수 있습니다.
+**카메라 ON**을 누르면 고정된 카메라 `0`을 `640×480`으로 열고 YuNet 얼굴 검출을 시작합니다. 얼굴 박스, 5개 랜드마크, 신뢰도와 검출 얼굴 수가 표시됩니다. **카메라 OFF**를 누르면 검출과 카메라 입력을 중지합니다.
 
 ### 카메라와 V4L2 확인
 
@@ -102,7 +108,13 @@ getent group video
 sudo usermod -aG video "$USER"
 ```
 
-카메라가 `/dev/video1` 등으로 잡히면 GUI의 카메라 번호를 변경합니다. 다른 프로세스의 점유 여부는 `fuser /dev/video0`으로 확인할 수 있습니다.
+현재 애플리케이션은 `/dev/video0`을 고정해서 사용합니다. 장치 번호는 다음 명령으로 확인할 수 있습니다.
+
+```bash
+python3 -m src.camera.camera_checker
+```
+
+다른 프로세스의 점유 여부는 `fuser /dev/video0`으로 확인할 수 있습니다.
 
 ### 테스트
 
@@ -123,4 +135,4 @@ RUN_CAMERA_TESTS=1 python3 -m unittest discover -s tests -v
 
 ### 다음 단계 연결 위치
 
-다음 단계의 YuNet 검출 파이프라인은 `AI/src/workers/video_worker.py`의 `camera.read()` 직후와 `frame_ready.emit()` 사이에 연결하면 됩니다. 카메라와 UI가 얼굴 검출 구현에 직접 의존하지 않도록 별도 파이프라인 모듈로 추가하는 방식을 권장합니다.
+다음 SFace 단계에서는 `FaceDetection.raw`와 원본 프레임을 사용해 얼굴을 정렬하고 특징 벡터를 추출합니다. 현재 단계에서는 SFace 관련 코드를 구현하지 않습니다.
