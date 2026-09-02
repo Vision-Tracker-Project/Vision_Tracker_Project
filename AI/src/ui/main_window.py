@@ -13,11 +13,29 @@ from PyQt5.QtWidgets import (
 )
 
 from src.camera.camera_capture import CameraCapture
+from src.communication.uart_sender import UartSender
 from src.config import (
     CAMERA_INDEX,
     DEFAULT_FRAME_HEIGHT,
     DEFAULT_FRAME_WIDTH,
+    PAN_INITIAL_ANGLE,
+    PAN_INVERTED,
+    PAN_MAX_ANGLE,
+    PAN_MIN_ANGLE,
+    SERVO_SEND_INTERVAL_SECONDS,
     SFACE_MODEL_PATH,
+    TILT_INITIAL_ANGLE,
+    TILT_INVERTED,
+    TILT_MAX_ANGLE,
+    TILT_MIN_ANGLE,
+    TRACKING_DEAD_ZONE_RATIO,
+    TRACKING_FILTER_ALPHA,
+    TRACKING_GAIN,
+    TRACKING_MAX_STEP_DEGREES,
+    UART_BAUD_RATE,
+    UART_PORT,
+    UART_RETRY_INTERVAL_SECONDS,
+    UART_WRITE_TIMEOUT_SECONDS,
     WINDOW_TITLE,
     YUNET_MODEL_PATH,
     YUNET_NMS_THRESHOLD,
@@ -26,6 +44,7 @@ from src.config import (
 )
 from src.detection.yunet_detector import YuNetDetector, YuNetError
 from src.recognition.sface_extractor import SFaceError, SFaceExtractor
+from src.tracking.face_tracker import FaceTracker
 from src.workers.video_worker import VideoWorker
 
 
@@ -59,6 +78,21 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.embedding_label)
         status_layout.addWidget(self.fps_label)
         layout.addLayout(status_layout)
+
+        tracking_layout = QHBoxLayout()
+        self.tracking_label = QLabel("추적: 얼굴 대기")
+        self.servo_label = QLabel(
+            f"팬 {PAN_INITIAL_ANGLE}° / 틸트 {TILT_INITIAL_ANGLE}°"
+        )
+        self.uart_label = QLabel(f"UART: 대기 — {UART_PORT}")
+        tracking_layout.addWidget(self.tracking_label, stretch=1)
+        tracking_layout.addWidget(self.servo_label)
+        tracking_layout.addWidget(self.uart_label)
+        layout.addLayout(tracking_layout)
+
+        self.packet_label = QLabel("패킷: 대기")
+        self.packet_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.packet_label)
 
         controls = QHBoxLayout()
         controls.addStretch()
@@ -96,12 +130,40 @@ class MainWindow(QMainWindow):
             width=DEFAULT_FRAME_WIDTH,
             height=DEFAULT_FRAME_HEIGHT,
         )
-        self.worker = VideoWorker(camera, detector, extractor, self)
+        tracker = FaceTracker(
+            pan_initial=PAN_INITIAL_ANGLE,
+            tilt_initial=TILT_INITIAL_ANGLE,
+            pan_range=(PAN_MIN_ANGLE, PAN_MAX_ANGLE),
+            tilt_range=(TILT_MIN_ANGLE, TILT_MAX_ANGLE),
+            filter_alpha=TRACKING_FILTER_ALPHA,
+            dead_zone_ratio=TRACKING_DEAD_ZONE_RATIO,
+            gain=TRACKING_GAIN,
+            max_step_degrees=TRACKING_MAX_STEP_DEGREES,
+            pan_inverted=PAN_INVERTED,
+            tilt_inverted=TILT_INVERTED,
+        )
+        uart_sender = UartSender(
+            port=UART_PORT,
+            baud_rate=UART_BAUD_RATE,
+            write_timeout=UART_WRITE_TIMEOUT_SECONDS,
+        )
+        self.worker = VideoWorker(
+            camera,
+            detector,
+            extractor,
+            tracker,
+            uart_sender,
+            send_interval=SERVO_SEND_INTERVAL_SECONDS,
+            uart_retry_interval=UART_RETRY_INTERVAL_SECONDS,
+            parent=self,
+        )
         self.worker.frame_ready.connect(self._display_frame)
         self.worker.camera_opened.connect(self._on_camera_opened)
         self.worker.fps_updated.connect(self._on_fps_updated)
         self.worker.face_count_updated.connect(self._on_face_count_updated)
         self.worker.embedding_status_updated.connect(self._on_embedding_status_updated)
+        self.worker.tracking_updated.connect(self._on_tracking_updated)
+        self.worker.uart_status_updated.connect(self._on_uart_status_updated)
         self.worker.error_occurred.connect(self._on_camera_error)
         self.worker.capture_stopped.connect(self._on_capture_stopped)
         self.worker.finished.connect(self._on_worker_finished)
@@ -164,6 +226,27 @@ class MainWindow(QMainWindow):
             f"Norm {l2_norm:.2f} / {elapsed_ms:.1f}ms"
         )
 
+    def _on_tracking_updated(self, tracking) -> None:
+        if tracking is None:
+            self.tracking_label.setText("추적: 얼굴 대기")
+            return
+        center_x, center_y = tracking["center"]
+        sent_text = "전송" if tracking["sent"] else "유지"
+        self.tracking_label.setText(
+            f"추적 중심: ({center_x:.0f}, {center_y:.0f}) — {sent_text}"
+        )
+        self.servo_label.setText(
+            f"팬 {tracking['pan_angle']}° / 틸트 {tracking['tilt_angle']}°"
+        )
+        self.packet_label.setText(
+            f"PAN: {tracking['pan_packet']}    "
+            f"TILT: {tracking['tilt_packet']}"
+        )
+
+    def _on_uart_status_updated(self, connected: bool, message: str) -> None:
+        state = "연결" if connected else "오류"
+        self.uart_label.setText(f"UART {state}: {message}")
+
     def _on_camera_error(self, message: str) -> None:
         self.status_label.setText(f"상태: 오류 — {message}")
         self.video_label.setText(message)
@@ -173,6 +256,12 @@ class MainWindow(QMainWindow):
             self.status_label.setText("상태: 정지됨")
         self.face_count_label.setText("검출 얼굴: 0")
         self.embedding_label.setText("SFace: 대기")
+        self.tracking_label.setText("추적: 얼굴 대기")
+        self.servo_label.setText(
+            f"팬 {PAN_INITIAL_ANGLE}° / 틸트 {TILT_INITIAL_ANGLE}°"
+        )
+        self.uart_label.setText(f"UART: 대기 — {UART_PORT}")
+        self.packet_label.setText("패킷: 대기")
         self.fps_label.setText("출력 FPS: 0.0")
         self._set_running_state(False)
 
