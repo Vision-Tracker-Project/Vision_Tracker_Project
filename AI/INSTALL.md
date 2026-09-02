@@ -1,43 +1,42 @@
-# AI 카메라·YuNet 설치 및 실행 안내
+# AI 카메라·YuNet·SFace 설치 및 실행
 
-## 현재 구현 단계
+## 현재 구현 범위
 
-현재 AI 모듈에는 USB 카메라 영상 출력과 YuNet 얼굴 검출이 구현되어 있습니다. SFace, 얼굴 유사도 비교, 추적 대상 선택 및 STM32 제어는 아직 포함하지 않습니다. YuNet의 동작 방식은 `YUNET.md`를 참고합니다.
+USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출까지 구현. 특징 벡터는 프레임 처리 중 메모리에서만 사용하며 파일·DB 저장은 미수행. 얼굴 유사도 비교, 추적 대상 선택, 좌표 필터링, STM32 전송은 미구현 상태.
 
 ```text
 AI/
-├── sample.py               # 실행 진입점
+├── sample.py
 ├── requirements.txt
-├── YUNET.md                # YuNet 얼굴 검출 설명
+├── INSTALL.md
+├── YUNET.md
+├── SFACE.md
 ├── models/
-│   └── face_detection_yunet_2023mar.onnx
+│   ├── face_detection_yunet_2023mar.onnx
+│   └── face_recognition_sface_2021dec.onnx
 ├── src/
 │   ├── config.py
 │   ├── camera/camera_capture.py
 │   ├── detection/yunet_detector.py
+│   ├── recognition/sface_extractor.py
 │   ├── workers/video_worker.py
 │   └── ui/main_window.py
 └── tests/
     ├── test_camera_capture.py
-    └── test_yunet_detector.py
+    ├── test_yunet_detector.py
+    └── test_sface_extractor.py
 ```
 
-### 환경과 PyQt 선택
+## Jetson 설치
 
-확인 당시 Python 3.10.12와 OpenCV 4.11.0은 설치되어 있었지만 PyQt5와 PyQt6는 설치되어 있지 않았습니다. Jetson Ubuntu 시스템 패키지와의 호환성을 고려해 PyQt5를 사용합니다. Linux에서는 V4L2 백엔드로 USB 카메라를 먼저 열고, 실패하면 OpenCV 기본 백엔드로 재시도합니다.
-
-Jetson ARM64에서는 `pip install PyQt5`를 사용하지 않습니다. PyPI에 호환 wheel이 없어 PyQt5 소스 빌드로 전환되고, `qmake` 관련 metadata 오류가 발생합니다. Ubuntu ARM64 저장소의 `python3-pyqt5`를 설치하고 가상환경에서 시스템 패키지를 공유하는 방식이 가장 간단합니다.
-
-### Jetson 설치
-
-먼저 가상환경 밖에서 시스템 PyQt5를 설치합니다.
+Jetson ARM64에서는 PyPI의 PyQt5 wheel이 없어 소스 빌드 오류 발생 가능. Ubuntu의 시스템 PyQt5 사용 권장.
 
 ```bash
 sudo apt update
 sudo apt install python3-pyqt5
 ```
 
-그다음 저장소의 `AI` 디렉터리에서 시스템 패키지를 공유하는 가상환경을 생성합니다. 이미 현재 `.venv/pyvenv.cfg`에 `include-system-site-packages = true`가 있다면 다시 만들 필요가 없습니다.
+Jetson의 시스템 OpenCV와 PyQt5를 공유하도록 가상환경 생성.
 
 ```bash
 cd ~/work/Vision_Tracker_Project/AI
@@ -47,92 +46,74 @@ python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 ```
 
-ARM64에서는 `requirements.txt`의 PyQt5 항목이 자동으로 건너뛰어집니다. PyQt5와 OpenCV import를 확인합니다.
+기존 `.venv/pyvenv.cfg`에 아래 설정이 있으면 가상환경 재생성 불필요.
+
+```text
+include-system-site-packages = true
+```
+
+설치 확인 명령은 다음과 같음.
 
 ```bash
 python3 -c "import cv2; print(cv2.__version__)"
 python3 -c "from PyQt5.QtCore import PYQT_VERSION_STR; print(PYQT_VERSION_STR)"
 ```
 
-PyQt5가 계속 보이지 않으면 가상환경 설정을 확인합니다.
+## Qt xcb 오류 확인
 
-```bash
-grep include-system-site-packages .venv/pyvenv.cfg
-```
-
-결과가 `false`라면 가상환경을 비활성화하고 `.venv`를 새 이름으로 보관한 다음 `--system-site-packages` 옵션으로 다시 생성합니다. 기존 환경을 삭제할 필요는 없습니다.
-
-### Qt xcb 플러그인 오류
-
-pip의 `opencv-python`은 import 과정에서 Qt 플러그인 경로를 OpenCV 패키지 내부로 변경합니다. 시스템 PyQt5와 함께 사용하면 다음과 같은 오류가 발생할 수 있습니다.
-
-```text
-Could not load the Qt platform plugin "xcb" in ".../site-packages/cv2/qt/plugins"
-```
-
-애플리케이션 진입점에서 `QApplication`을 만들기 전에 PyQt5의 실제 플러그인 경로를 다시 설정하도록 처리되어 있습니다. 설치 상태는 다음 명령으로 확인할 수 있습니다.
+pip OpenCV가 Qt 플러그인 경로를 OpenCV 패키지 내부로 변경할 수 있음. 앱 시작 시 PyQt5의 실제 플러그인 경로로 복원하도록 구현.
 
 ```bash
 python3 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.PluginsPath))"
 ```
 
-Jetson Ubuntu에서는 일반적으로 `/usr/lib/aarch64-linux-gnu/qt5/plugins`가 출력됩니다. 그래도 `xcb` 오류가 발생하면 누락된 공유 라이브러리를 확인합니다.
+Jetson Ubuntu의 일반적인 출력 경로는 다음과 같음.
+
+```text
+/usr/lib/aarch64-linux-gnu/qt5/plugins
+```
+
+`xcb` 오류 지속 시 누락된 공유 라이브러리 확인 가능.
 
 ```bash
 ldd /usr/lib/aarch64-linux-gnu/qt5/plugins/platforms/libqxcb.so | grep "not found"
 ```
 
-### 실행
-
-`AI` 디렉터리에서 실행합니다.
+## 실행
 
 ```bash
+cd ~/work/Vision_Tracker_Project/AI
+source .venv/bin/activate
 python3 sample.py
 ```
 
-**카메라 ON**을 누르면 고정된 카메라 `0`을 `640×480`으로 열고 YuNet 얼굴 검출을 시작합니다. 얼굴 박스, 5개 랜드마크, 신뢰도와 검출 얼굴 수가 표시됩니다. **카메라 OFF**를 누르면 검출과 카메라 입력을 중지합니다.
+`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출과 SFace 추출 시작. 화면에서 얼굴 박스, 랜드마크, 검출 수, 특징 차원, L2 norm, 추출 시간 확인 가능. `카메라 OFF` 선택 시 처리 중지 및 카메라 해제.
 
-### 카메라와 V4L2 확인
+## 카메라 확인
 
 ```bash
 ls -l /dev/video*
 v4l2-ctl --list-devices
-v4l2-ctl --device=/dev/video0 --all
-groups
-getent group video
-```
-
-`v4l2-ctl`은 `v4l-utils` 패키지에서 제공됩니다. 카메라 권한이 없다면 관리자의 승인을 받아 사용자를 `video` 그룹에 추가하고 다시 로그인합니다.
-
-```bash
-sudo usermod -aG video "$USER"
-```
-
-현재 애플리케이션은 `/dev/video0`을 고정해서 사용합니다. 장치 번호는 다음 명령으로 확인할 수 있습니다.
-
-```bash
 python3 -m src.camera.camera_checker
 ```
 
-다른 프로세스의 점유 여부는 `fuser /dev/video0`으로 확인할 수 있습니다.
-
-### 테스트
-
-실제 카메라 없이 실행되는 기본 테스트와 문법 검사는 다음과 같습니다.
+현재 앱은 카메라 번호 `0`으로 고정. 점유 여부는 아래 명령으로 확인 가능.
 
 ```bash
-cd AI
+fuser /dev/video0
+```
+
+## 테스트
+
+카메라 없이 단위 테스트와 문법 검사 가능.
+
+```bash
 python3 -m unittest discover -s tests -v
 python3 -m compileall -q sample.py src tests
 ```
 
-카메라가 연결된 환경에서만 하드웨어 테스트를 활성화합니다.
+실제 카메라 테스트는 명시적으로 활성화할 때만 실행.
 
 ```bash
-cd AI
 RUN_CAMERA_TESTS=1 python3 -m unittest discover -s tests -v
 ```
-
-### 다음 단계 연결 위치
-
-다음 SFace 단계에서는 `FaceDetection.raw`와 원본 프레임을 사용해 얼굴을 정렬하고 특징 벡터를 추출합니다. 현재 단계에서는 SFace 관련 코드를 구현하지 않습니다.
