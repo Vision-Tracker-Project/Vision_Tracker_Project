@@ -25,7 +25,9 @@ python3 -m unittest discover -s tests -v
 tests/
 ├── test_camera_capture.py
 ├── test_yunet_detector.py
-└── test_sface_extractor.py
+├── test_sface_extractor.py
+├── test_face_tracker.py
+└── test_uart_protocol.py
 ```
 
 | 파일 | 확인 내용 |
@@ -33,6 +35,8 @@ tests/
 | `test_camera_capture.py` | 기본 카메라 설정, 오류 처리, 안전한 해제, 실제 장치 연결 |
 | `test_yunet_detector.py` | 모델 누락 오류, 검출 결과 변환, 얼굴 박스 표시 |
 | `test_sface_extractor.py` | 모델 누락 오류, 128차원 벡터 추출, 잘못된 차원 검사 |
+| `test_face_tracker.py` | 추적 대상 선택, 중심 무동작 영역, 각도 변경과 제한 |
+| `test_uart_protocol.py` | 6바이트 패킷, 체크섬, PAN/TILT 연속 전송 |
 
 ## 결과 읽는 방법
 
@@ -78,6 +82,20 @@ SFace 테스트:
 ```bash
 python3 -m unittest tests.test_sface_extractor -v
 ```
+
+얼굴 추적 테스트:
+
+```bash
+python3 -m unittest tests.test_face_tracker -v
+```
+
+UART 패킷 테스트:
+
+```bash
+python3 -m unittest tests.test_uart_protocol -v
+```
+
+UART 테스트는 가짜 직렬 포트를 사용하므로 STM32 연결 없이 실행 가능.
 
 ## 클래스 또는 테스트 하나만 실행
 

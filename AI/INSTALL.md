@@ -1,8 +1,8 @@
-# AI 카메라·YuNet·SFace 설치 및 실행
+# AI 카메라·YuNet·SFace·팬틸트 UART 설치 및 실행
 
 ## 현재 구현 범위
 
-USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출까지 구현. 특징 벡터는 프레임 처리 중 메모리에서만 사용하며 파일·DB 저장은 미수행. 얼굴 유사도 비교, 추적 대상 선택, 좌표 필터링, STM32 전송은 미구현 상태.
+USB 카메라 출력, YuNet 얼굴 검출, SFace 특징 벡터 추출, 가장 큰 얼굴 선택, 중심 좌표 필터링, 팬·틸트 각도 계산, Jetson UART 전송까지 구현. 특징 벡터는 프레임 처리 중 메모리에서만 사용하며 파일·DB 저장은 미수행. 얼굴 등록 및 유사도 비교는 미구현 상태.
 
 ```text
 AI/
@@ -11,6 +11,7 @@ AI/
 ├── INSTALL.md
 ├── YUNET.md
 ├── SFACE.md
+├── UART.md
 ├── models/
 │   ├── face_detection_yunet_2023mar.onnx
 │   └── face_recognition_sface_2021dec.onnx
@@ -19,12 +20,17 @@ AI/
 │   ├── camera/camera_capture.py
 │   ├── detection/yunet_detector.py
 │   ├── recognition/sface_extractor.py
+│   ├── tracking/face_tracker.py
+│   ├── communication/protocol.py
+│   ├── communication/uart_sender.py
 │   ├── workers/video_worker.py
 │   └── ui/main_window.py
 └── tests/
     ├── test_camera_capture.py
     ├── test_yunet_detector.py
-    └── test_sface_extractor.py
+    ├── test_sface_extractor.py
+    ├── test_face_tracker.py
+    └── test_uart_protocol.py
 ```
 
 ## Jetson 설치
@@ -57,6 +63,7 @@ include-system-site-packages = true
 ```bash
 python3 -c "import cv2; print(cv2.__version__)"
 python3 -c "from PyQt5.QtCore import PYQT_VERSION_STR; print(PYQT_VERSION_STR)"
+python3 -c "import serial; print(serial.__version__)"
 ```
 
 ## Qt xcb 오류 확인
@@ -87,7 +94,15 @@ source .venv/bin/activate
 python3 sample.py
 ```
 
-`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출과 SFace 추출 시작. 화면에서 얼굴 박스, 랜드마크, 검출 수, 특징 차원, L2 norm, 추출 시간 확인 가능. `카메라 OFF` 선택 시 처리 중지 및 카메라 해제.
+`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 팬·틸트 추적, UART 전송 시작. 화면에서 얼굴 박스, 선택 대상, 중심 좌표, 목표 각도, UART 상태와 패킷 확인 가능. `카메라 OFF` 선택 시 처리 중지, UART 연결 종료 및 카메라 해제.
+
+기본 UART 장치는 `/dev/ttyUSB0`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
+
+```bash
+VISION_UART_PORT=/dev/ttyTHS1 python3 sample.py
+```
+
+패킷과 추적 설정은 `UART.md` 참고.
 
 ## 카메라 확인
 
