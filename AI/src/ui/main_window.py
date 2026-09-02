@@ -1,10 +1,11 @@
 """USB 카메라 미리보기 메인 창."""
 
 import cv2
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QHBoxLayout,
+    QFileDialog,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -15,9 +16,12 @@ from PyQt5.QtWidgets import (
 
 from src.buffer.frame_buffer_worker import FrameBufferWorker
 from src.camera.camera_capture import CameraCapture
+from src.capture.frame_capture import CaptureError, FrameCapture
 from src.communication.uart_sender import UartSender
 from src.config import (
     CAMERA_INDEX,
+    CAPTURE_DEFAULT_DIR,
+    CAPTURE_FLASH_MILLISECONDS,
     DEFAULT_FRAME_HEIGHT,
     DEFAULT_FRAME_WIDTH,
     PAN_INITIAL_ANGLE,
@@ -53,15 +57,30 @@ from src.workers.video_worker import VideoWorker
 
 
 class MainWindow(QMainWindow):
+    VIDEO_STYLE = (
+        "background-color: #151515; color: #dddddd; "
+        "border: 3px solid #151515;"
+    )
+    CAPTURE_FLASH_STYLE = (
+        "background-color: #151515; color: #dddddd; "
+        "border: 3px solid #ffd400;"
+    )
+
     def __init__(self) -> None:
         super().__init__()
         self.worker = None
         self._latest_live_image = None
         self._displayed_image = None
+        self._latest_live_frame = None
+        self._displayed_frame = None
         self._is_replay_mode = False
+        self.frame_capture = FrameCapture(CAPTURE_DEFAULT_DIR)
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(1100, 760)
         self._build_ui()
+        self._capture_flash_timer = QTimer(self)
+        self._capture_flash_timer.setSingleShot(True)
+        self._capture_flash_timer.timeout.connect(self._restore_video_border)
         self.frame_buffer_worker = FrameBufferWorker(
             max_duration_seconds=REPLAY_BUFFER_SECONDS,
             jpeg_quality=REPLAY_JPEG_QUALITY,
@@ -79,7 +98,7 @@ class MainWindow(QMainWindow):
         self.video_label = QLabel("카메라 시작 버튼을 누르세요.")
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setMinimumSize(640, 360)
-        self.video_label.setStyleSheet("background-color: #151515; color: #dddddd;")
+        self.video_label.setStyleSheet(self.VIDEO_STYLE)
         layout.addWidget(self.video_label, stretch=1)
 
         replay_layout = QHBoxLayout()
@@ -99,6 +118,21 @@ class MainWindow(QMainWindow):
         replay_layout.addWidget(self.replay_status_label)
         replay_layout.addWidget(self.live_button)
         layout.addLayout(replay_layout)
+
+        capture_layout = QHBoxLayout()
+        self.capture_button = QPushButton("현재 화면 캡처")
+        self.capture_button.setEnabled(False)
+        self.capture_button.clicked.connect(self.capture_current_frame)
+        self.capture_directory_button = QPushButton("저장 폴더 선택")
+        self.capture_directory_button.clicked.connect(self.select_capture_directory)
+        self.capture_directory_label = QLabel(str(self.frame_capture.output_directory))
+        self.capture_directory_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.capture_status_label = QLabel("캡처: 대기")
+        capture_layout.addWidget(self.capture_button)
+        capture_layout.addWidget(self.capture_directory_button)
+        capture_layout.addWidget(self.capture_directory_label, stretch=1)
+        capture_layout.addWidget(self.capture_status_label)
+        layout.addLayout(capture_layout)
 
         status_layout = QHBoxLayout()
         self.status_label = QLabel("상태: 정지됨")
@@ -223,10 +257,13 @@ class MainWindow(QMainWindow):
 
     def _display_frame(self, frame) -> None:
         try:
-            self._latest_live_image = self._frame_to_image(frame)
+            self._latest_live_frame = frame.copy()
+            self._latest_live_image = self._frame_to_image(self._latest_live_frame)
             if not self._is_replay_mode:
+                self._displayed_frame = self._latest_live_frame
                 self._displayed_image = self._latest_live_image
                 self._render_displayed_image()
+            self.capture_button.setEnabled(True)
         finally:
             if self.worker is not None:
                 self.worker.mark_frame_consumed()
@@ -266,7 +303,8 @@ class MainWindow(QMainWindow):
         frame = self.frame_buffer_worker.frame_seconds_ago(seconds_ago)
         if frame is None:
             return
-        self._displayed_image = self._frame_to_image(frame)
+        self._displayed_frame = frame
+        self._displayed_image = self._frame_to_image(self._displayed_frame)
         self._render_displayed_image()
         self.replay_status_label.setText(f"다시보기: -{seconds_ago:.1f}초")
 
@@ -277,6 +315,7 @@ class MainWindow(QMainWindow):
         self.timeline_slider.blockSignals(False)
         self.live_button.setEnabled(False)
         if self._latest_live_image is not None:
+            self._displayed_frame = self._latest_live_frame
             self._displayed_image = self._latest_live_image
             self._render_displayed_image()
         self.replay_status_label.setText("다시보기: 실시간")
@@ -301,6 +340,36 @@ class MainWindow(QMainWindow):
 
     def _on_buffer_error(self, message: str) -> None:
         self.replay_status_label.setText(f"다시보기 오류: {message}")
+
+    def select_capture_directory(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "캡처 저장 폴더 선택",
+            str(self.frame_capture.output_directory),
+        )
+        if not selected:
+            return
+        try:
+            self.frame_capture.set_output_directory(selected)
+        except CaptureError as error:
+            self.capture_status_label.setText(f"캡처 오류: {error}")
+            return
+        self.capture_directory_label.setText(str(self.frame_capture.output_directory))
+        self.capture_status_label.setText("캡처: 저장 폴더 변경")
+
+    def capture_current_frame(self) -> None:
+        source = "replay" if self._is_replay_mode else "live"
+        try:
+            output_path = self.frame_capture.save(self._displayed_frame, source)
+        except CaptureError as error:
+            self.capture_status_label.setText(f"캡처 오류: {error}")
+            return
+        self.capture_status_label.setText(f"캡처 완료: {output_path.name}")
+        self.video_label.setStyleSheet(self.CAPTURE_FLASH_STYLE)
+        self._capture_flash_timer.start(CAPTURE_FLASH_MILLISECONDS)
+
+    def _restore_video_border(self) -> None:
+        self.video_label.setStyleSheet(self.VIDEO_STYLE)
 
     def _on_fps_updated(self, fps: float) -> None:
         self.fps_label.setText(f"출력 FPS: {fps:.1f}")
