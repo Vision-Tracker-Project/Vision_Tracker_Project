@@ -86,7 +86,6 @@ class VideoWorker(QThread):
         last_fps_emit = 0.0
         last_servo_send = 0.0
         next_uart_retry = 0.0
-        has_sent_angles = False
         was_tracking_enabled = False
         try:
             info = self.camera.open()
@@ -104,7 +103,6 @@ class VideoWorker(QThread):
                             f"연결됨 — {self.uart_sender.port} "
                             f"{self.uart_sender.baud_rate}bps",
                         )
-                        has_sent_angles = False
                     except UartError as error:
                         self.uart_status_updated.emit(False, str(error))
                         next_uart_retry = now + self.uart_retry_interval
@@ -122,7 +120,6 @@ class VideoWorker(QThread):
                     if tracking_enabled:
                         if not was_tracking_enabled:
                             self.tracker.reset_target()
-                            has_sent_angles = False
                         tracking = self.tracker.update(detections, (width, height))
                         if tracking is None:
                             self.tracking_updated.emit(None)
@@ -135,18 +132,18 @@ class VideoWorker(QThread):
                             )
                             sent = False
                             send_due = now - last_servo_send >= self.send_interval
-                            if self.uart_sender.is_open and send_due and (
-                                tracking.angles_changed or not has_sent_angles
+                            if (
+                                self.uart_sender.is_open
+                                and send_due
+                                and tracking.angles_changed
                             ):
                                 try:
                                     self.uart_sender.send((pan_packet, tilt_packet))
                                     last_servo_send = now
-                                    has_sent_angles = True
                                     sent = True
                                 except UartError as error:
                                     self.uart_status_updated.emit(False, str(error))
                                     next_uart_retry = now + self.uart_retry_interval
-                                    has_sent_angles = False
 
                             self.tracking_updated.emit(
                                 {
@@ -160,7 +157,6 @@ class VideoWorker(QThread):
                             )
                     elif was_tracking_enabled:
                         self.tracker.reset_target()
-                        has_sent_angles = False
                     was_tracking_enabled = tracking_enabled
                     self.detector.draw(frame, detections)
                     self.tracker.draw(frame, tracking)
