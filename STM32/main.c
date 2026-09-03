@@ -9,8 +9,9 @@ void Main(void)
 
     printf("test !\n");
 
+    LED_Init();
     for(;;)
     {
-
+        LED_On();
     }
 }

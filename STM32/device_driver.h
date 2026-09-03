@@ -13,3 +13,7 @@ extern void Uart2_Send_Byte(char data);
 extern void Uart2_RX_Interrupt_Enable(int en);
 
 
+//Led.c
+extern void LED_Init(void);
+extern void LED_On(void);
+extern void LED_Off(void);
