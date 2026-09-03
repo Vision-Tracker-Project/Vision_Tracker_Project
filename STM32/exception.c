@@ -11,11 +11,8 @@ void _Invalid_ISR(void)
 
 void USART2_IRQHandler(void)
 {
-    // RXNE(수신 데이터 준비)인 경우에만 DR을 읽습니다.
-    // DR을 읽으면 RXNE가 클리어됩니다.
     if (Macro_Check_Bit_Set(USART2->SR, 5))
     {
-        Uart_Data = (unsigned char)(USART2->DR & 0xFF);
-        Uart_Data_In = 1;
+        Uart2_RX_Push_From_ISR((unsigned char)(USART2->DR & 0xFFU));
     }
 }

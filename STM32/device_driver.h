@@ -13,9 +13,8 @@ extern void Uart2_Send_Byte(char data);
 extern void Uart2_Send_String(char *pt);
 extern char Uart2_Get_Pressed(void);
 extern void Uart2_RX_Interrupt_Enable(int en);
-
-extern volatile unsigned char Uart_Data;
-extern volatile unsigned char Uart_Data_In;
+extern void Uart2_RX_Push_From_ISR(unsigned char data);
+extern void Packet_Receive(void);
 
 // LED
 extern void LED_Off();
@@ -31,13 +30,8 @@ extern void TIM2_Servo_Init();
 extern void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_us);
 extern void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_us);
 
-extern volatile unsigned char Uart_Data;
-extern volatile unsigned char Uart_Data_In;
-
 // USART2 interrupt handler
 extern void USART2_IRQHandler(void);
-extern void Packet_Receive();
-
 
 
 
