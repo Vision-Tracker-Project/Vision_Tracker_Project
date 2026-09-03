@@ -61,8 +61,8 @@ void TIM2_Servo_Init(void)
 
 
     // 초기 펄스 폭: 1.5ms
-    TIM2->CCR1 = 1000;
-    TIM2->CCR2 = 1000;
+    TIM2->CCR1 = 1500;
+    TIM2->CCR2 = 1500;
 
     // CH1 Output Enable
     TIM2->CCER = 0;
@@ -78,12 +78,12 @@ void TIM2_Servo_Init(void)
     TIM2->CR1 |= (1 << 0);
 }
 
-void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_ms)
+void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_us)
 {
-    if (pulse_ms < 1000) pulse_ms = 1000;
-    if (pulse_ms > 2000) pulse_ms = 2000;
+    if (pulse_us < 1000) pulse_us = 1000;
+    if (pulse_us > 2000) pulse_us = 2000;
 
-    TIM2->CCR1 = pulse_ms;
+    TIM2->CCR1 = pulse_us;
 }
 
 void TIM2_Servo_Set_Pan_Angle(unsigned int angle)
@@ -96,12 +96,12 @@ void TIM2_Servo_Set_Pan_Angle(unsigned int angle)
     TIM2->CCR1 = pulse;
 }
 
-void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_ms)
+void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_us)
 {
-    if (pulse_ms < 1000) pulse_ms = 1000;
-    if (pulse_ms > 2000) pulse_ms = 2000;
+    if (pulse_us < 1000) pulse_us = 1000;
+    if (pulse_us > 2000) pulse_us = 2000;
 
-    TIM2->CCR2 = pulse_ms;
+    TIM2->CCR2 = pulse_us;
 }
 
 void TIM2_Servo_Set_Tilt_Angle(unsigned int angle)
