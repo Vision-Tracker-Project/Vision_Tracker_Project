@@ -4,43 +4,6 @@
 #define SERVO_TIMER_FREQ    1000000
 #define SERVO_PERIOD_US     20000
 
-
-
-
-void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_us)
-{
-    if (pulse_us < 1000) pulse_us = 1000;
-    if (pulse_us > 2000) pulse_us = 2000;
-
-    TIM2->CCR1 = pulse_us;
-}
-void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_us)
-{
-    if (pulse_us < 1000) pulse_us = 1000;
-    if (pulse_us > 2000) pulse_us = 2000;
-
-    TIM2->CCR2 = pulse_us;
-}
-void TIM2_Servo_Set_Pan_Angle(unsigned int angle)
-{
-    unsigned int pulse;
-
-    if (angle > 180) angle = 180;
-
-    pulse = 1000 + ((angle * 1000) / 180);
-    TIM2->CCR1 = pulse;
-}
-
-void TIM2_Servo_Set_Tilt_Angle(unsigned int angle)
-{
-    unsigned int pulse;
-
-    if (angle > 180) angle = 180;
-
-    pulse = 1000 + ((angle * 1000) / 180);
-    TIM2->CCR2 = pulse;
-}
-
 void TIM2_Servo_Init(void)
 {
     // GPIOA Clock Enable
@@ -56,7 +19,6 @@ void TIM2_Servo_Init(void)
     Macro_Write_Block(GPIOA->MODER, 0x3, 0x2, 0);
     Macro_Write_Block(GPIOA->MODER, 0x3, 0x2, 2);
     
-
     // --------------------------------------------------------
     // PA0 Alternate Function 1
     // PA1 Alternate Function 1 
@@ -98,9 +60,9 @@ void TIM2_Servo_Init(void)
     TIM2->CCMR1 |= (0x6 << 12 );  // CH2 PWM MODE 1
 
 
-    // 초기 펄스 폭: 1.5ms -> 약 90도
-    TIM2->CCR1 = 1500;
-    TIM2->CCR2 = 1500;
+    // 초기 펄스 폭: 1.5ms
+    TIM2->CCR1 = 1000;
+    TIM2->CCR2 = 1000;
 
     // CH1 Output Enable
     TIM2->CCER = 0;
@@ -114,4 +76,40 @@ void TIM2_Servo_Init(void)
 
     // Timer Start
     TIM2->CR1 |= (1 << 0);
+}
+
+void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_ms)
+{
+    if (pulse_ms < 1000) pulse_ms = 1000;
+    if (pulse_ms > 2000) pulse_ms = 2000;
+
+    TIM2->CCR1 = pulse_ms;
+}
+
+void TIM2_Servo_Set_Pan_Angle(unsigned int angle)
+{
+    unsigned int pulse;
+
+    if (angle > 180) angle = 180;
+
+    pulse = 1000 + ((angle * 1000) / 180);
+    TIM2->CCR1 = pulse;
+}
+
+void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_ms)
+{
+    if (pulse_ms < 1000) pulse_ms = 1000;
+    if (pulse_ms > 2000) pulse_ms = 2000;
+
+    TIM2->CCR2 = pulse_ms;
+}
+
+void TIM2_Servo_Set_Tilt_Angle(unsigned int angle)
+{
+    unsigned int pulse;
+
+    if (angle > 180) angle = 180;
+
+    pulse = 1000 + ((angle * 1000) / 180);
+    TIM2->CCR2 = pulse;
 }
