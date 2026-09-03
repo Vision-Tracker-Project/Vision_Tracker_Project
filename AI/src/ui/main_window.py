@@ -392,14 +392,19 @@ class MainWindow(QMainWindow):
         self.start_button.setObjectName("startButton")
         self.stop_button = QPushButton("카메라 OFF")
         self.stop_button.setObjectName("stopButton")
+        self.tracking_button = QPushButton("추적 시작")
+        self.tracking_button.setCheckable(True)
+        self.tracking_button.setEnabled(False)
         self.exit_button = QPushButton("종료")
         self.exit_button.setObjectName("exitButton")
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
+        self.tracking_button.toggled.connect(self._set_tracking_enabled)
         self.exit_button.clicked.connect(self.close)
         camera_button_layout.addWidget(self.start_button)
         camera_button_layout.addWidget(self.stop_button)
         control_layout.addLayout(camera_button_layout)
+        control_layout.addWidget(self.tracking_button)
         control_layout.addWidget(self.exit_button)
         sidebar_layout.addWidget(control_group)
         sidebar_layout.addStretch()
@@ -482,11 +487,25 @@ class MainWindow(QMainWindow):
         self.status_label.setText("상태: 정지 중...")
         self.worker.request_stop()
 
+    def _set_tracking_enabled(self, enabled: bool) -> None:
+        if self.worker is None or not self.worker.isRunning():
+            self.tracking_button.setChecked(False)
+            return
+
+        self.worker.set_tracking_enabled(enabled)
+        self.tracking_button.setText("추적 정지" if enabled else "추적 시작")
+        if enabled:
+            self.tracking_label.setText("추적: 얼굴 확인 중")
+        else:
+            self.tracking_label.setText("추적: 정지 — 얼굴 검출만 실행")
+            self.packet_label.setText("패킷: 추적 정지")
+
     def _on_camera_opened(self, info) -> None:
         self.status_label.setText(
             f"상태: 연결됨 — {info.width}×{info.height}, "
             f"장치 FPS {info.fps:.1f}, {info.backend}"
         )
+        self.tracking_label.setText("추적: 정지 — 얼굴 검출만 실행")
 
     def _display_frame(self, frame) -> None:
         try:
@@ -658,6 +677,8 @@ class MainWindow(QMainWindow):
         self.uart_label.setText(f"UART: 대기 — {UART_PORT}")
         self.packet_label.setText("패킷: 대기")
         self.fps_label.setText("출력 FPS: 0.0")
+        self.tracking_button.setChecked(False)
+        self.tracking_button.setText("추적 시작")
         self._set_running_state(False)
 
     def _on_worker_finished(self) -> None:
@@ -669,6 +690,7 @@ class MainWindow(QMainWindow):
     def _set_running_state(self, running: bool) -> None:
         self.start_button.setEnabled(not running)
         self.stop_button.setEnabled(running)
+        self.tracking_button.setEnabled(running)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

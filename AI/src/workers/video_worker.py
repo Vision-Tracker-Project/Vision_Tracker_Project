@@ -50,12 +50,24 @@ class VideoWorker(QThread):
         self.send_interval = send_interval
         self.uart_retry_interval = uart_retry_interval
         self._stop_event = threading.Event()
+        self._tracking_enabled = threading.Event()
         self._pending_lock = threading.Lock()
         self._frame_pending = False
 
     def request_stop(self) -> None:
         self._stop_event.set()
         self.requestInterruption()
+
+    @property
+    def is_tracking_enabled(self) -> bool:
+        return self._tracking_enabled.is_set()
+
+    def set_tracking_enabled(self, enabled: bool) -> None:
+        """카메라 처리는 유지하고 각도 계산과 UART 전송만 전환."""
+        if enabled:
+            self._tracking_enabled.set()
+        else:
+            self._tracking_enabled.clear()
 
     def mark_frame_consumed(self) -> None:
         """GUI가 표시를 끝냈음을 기록해 다음 프레임 전달을 허용한다."""
@@ -75,6 +87,7 @@ class VideoWorker(QThread):
         last_servo_send = 0.0
         next_uart_retry = 0.0
         has_sent_angles = False
+        was_tracking_enabled = False
         try:
             info = self.camera.open()
             self.camera_opened.emit(info)
@@ -104,41 +117,51 @@ class VideoWorker(QThread):
                         for detection in detections
                     ]
                     height, width = frame.shape[:2]
-                    tracking = self.tracker.update(detections, (width, height))
-                    if tracking is None:
-                        self.tracking_updated.emit(None)
-                    else:
-                        pan_packet = build_servo_packet(
-                            PAN_TARGET_ID, tracking.pan_angle
-                        )
-                        tilt_packet = build_servo_packet(
-                            TILT_TARGET_ID, tracking.tilt_angle
-                        )
-                        sent = False
-                        send_due = now - last_servo_send >= self.send_interval
-                        if self.uart_sender.is_open and send_due and (
-                            tracking.angles_changed or not has_sent_angles
-                        ):
-                            try:
-                                self.uart_sender.send((pan_packet, tilt_packet))
-                                last_servo_send = now
-                                has_sent_angles = True
-                                sent = True
-                            except UartError as error:
-                                self.uart_status_updated.emit(False, str(error))
-                                next_uart_retry = now + self.uart_retry_interval
-                                has_sent_angles = False
+                    tracking_enabled = self.is_tracking_enabled
+                    tracking = None
+                    if tracking_enabled:
+                        if not was_tracking_enabled:
+                            self.tracker.reset_target()
+                            has_sent_angles = False
+                        tracking = self.tracker.update(detections, (width, height))
+                        if tracking is None:
+                            self.tracking_updated.emit(None)
+                        else:
+                            pan_packet = build_servo_packet(
+                                PAN_TARGET_ID, tracking.pan_angle
+                            )
+                            tilt_packet = build_servo_packet(
+                                TILT_TARGET_ID, tracking.tilt_angle
+                            )
+                            sent = False
+                            send_due = now - last_servo_send >= self.send_interval
+                            if self.uart_sender.is_open and send_due and (
+                                tracking.angles_changed or not has_sent_angles
+                            ):
+                                try:
+                                    self.uart_sender.send((pan_packet, tilt_packet))
+                                    last_servo_send = now
+                                    has_sent_angles = True
+                                    sent = True
+                                except UartError as error:
+                                    self.uart_status_updated.emit(False, str(error))
+                                    next_uart_retry = now + self.uart_retry_interval
+                                    has_sent_angles = False
 
-                        self.tracking_updated.emit(
-                            {
-                                "center": tracking.center,
-                                "pan_angle": tracking.pan_angle,
-                                "tilt_angle": tracking.tilt_angle,
-                                "pan_packet": pan_packet.hex_string,
-                                "tilt_packet": tilt_packet.hex_string,
-                                "sent": sent,
-                            }
-                        )
+                            self.tracking_updated.emit(
+                                {
+                                    "center": tracking.center,
+                                    "pan_angle": tracking.pan_angle,
+                                    "tilt_angle": tracking.tilt_angle,
+                                    "pan_packet": pan_packet.hex_string,
+                                    "tilt_packet": tilt_packet.hex_string,
+                                    "sent": sent,
+                                }
+                            )
+                    elif was_tracking_enabled:
+                        self.tracker.reset_target()
+                        has_sent_angles = False
+                    was_tracking_enabled = tracking_enabled
                     self.detector.draw(frame, detections)
                     self.tracker.draw(frame, tracking)
                     self.face_count_updated.emit(len(detections))
