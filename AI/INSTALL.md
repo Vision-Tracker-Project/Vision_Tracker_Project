@@ -105,19 +105,21 @@ python3 main.py
 
 `카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 최근 프레임 저장 시작. 얼굴 박스를 확인한 뒤 `추적 시작` 선택 시 팬·틸트 각도 계산과 UART 전송 시작. `추적 정지` 선택 시 얼굴 검출과 영상 표시는 유지하고 UART 전송 중단. 시간 슬라이더로 최근 60초 확인 가능. `카메라 OFF` 선택 시 전체 처리 중지, UART 연결 종료 및 카메라 해제.
 
-기본 UART 장치는 `/dev/ttyACM0`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
+기본 UART 장치는 `/dev/ttyACM07`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
 
 ```bash
-VISION_UART_PORT=/dev/ttyTHS1 python3 main.py
+VISION_UART_PORT=/dev/ttyACM1 python3 main.py
 ```
 
-패킷과 추적 설정은 `UART.md` 참고.
+패킷과 추적 설정은 `UART.md`, 장치 주소·권한 오류는 `TROUBLESHOOTING.md` 참고.
 
 최근 프레임 다시보기 설정은 `REPLAY.md` 참고.
 
 실시간 또는 다시보기 화면에서 `현재 화면 캡처` 선택 시 현재 표시 프레임을 PNG로 저장. `저장 폴더 선택`으로 경로 변경 가능. 자세한 내용은 `CAPTURE.md` 참고.
 
 ## 카메라 확인
+
+권한, 장치 점유, OpenCV 단독 확인 절차는 `TROUBLESHOOTING.md` 참고.
 
 ```bash
 ls -l /dev/video*
@@ -147,3 +149,4 @@ python3 -m compileall -q main.py src tests
 ```bash
 RUN_CAMERA_TESTS=1 python3 -m unittest discover -s tests -v
 ```
+4

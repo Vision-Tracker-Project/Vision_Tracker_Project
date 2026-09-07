@@ -70,29 +70,10 @@ PAN과 TILT 값 변경 시 6바이트 패킷 두 개를 합친 12바이트를 �
 장치 경로가 다른 경우 실행 전에 환경 변수 지정.
 
 ```bash
-VISION_UART_PORT=/dev/ttyTHS1 python3 main.py
+VISION_UART_PORT=/dev/ttyACM1 python3 main.py
 ```
 
-USB-UART 장치 확인:
-
-```bash
-ls -l /dev/ttyUSB* /dev/ttyACM*
-```
-
-접근 권한 오류 시 현재 계정의 `dialout` 그룹 확인.
-
-```bash
-groups
-ls -l /dev/ttyACM0
-```
-
-`dialout` 추가가 필요한 경우:
-
-```bash
-sudo usermod -aG dialout $USER
-```
-
-변경 후 로그아웃·로그인 필요.
+장치 주소 검색, 접근 권한, 점유 및 에코 확인은 `TROUBLESHOOTING.md` 참고.
 
 ## 방향과 움직임 조정
 
