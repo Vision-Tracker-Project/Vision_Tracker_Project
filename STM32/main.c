@@ -1,179 +1,53 @@
 #include "device_driver.h"
-#include <stdio.h>
-#include<string.h>
 
-#define COMMAND_BUFFER_SIZE 32
-#define PACKET_SIZE 6 
-#define start 1
+/* Standalone PA1 / TIM2_CH2 servo test. No UART commands required.
+ * Nominal angles depend on the calibrated pulse endpoints in servo.c.
+ */
+#define TEST_STEP_DELAY_MS 20U
+#define TEST_HOLD_MS       1000U
 
-static int pan_angle = 90;
-static int tilt_angle = 90;
-
-#define SERVO_STEP 10
-#define SERVO_MIN_ANGLE 0
-#define SERVO_MAX_ANGLE 180
-
-static char command_buffer[COMMAND_BUFFER_SIZE];
-static int command_index = 0;
-// 함수 원형 선언
-static void Command_Process(char *command);
-static void Command_Receive(void);
-
-
-static void Sys_Init(int baud) 
+static void Delay_Ms(unsigned int milliseconds)
 {
-	SCB->CPACR |= (0x3 << 10*2)|(0x3 << 11*2); 
-	Clock_Init();
-	Uart2_Init(baud);
-	setvbuf(stdout, NULL, _IONBF, 0);
-	LED_Init();
+    /* Poll SysTick without interrupts; PWM TIM2 keeps running. */
+    while (milliseconds-- > 0U)
+    {
+        while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0U)
+        {
+        }
+    }
 }
 
 void Main(void)
 {
-    Sys_Init(115200);
+    unsigned int angle;
 
-    // TIM2_CH1 / PA0 서보 PWM 초기화
+    SCB->CPACR |= (0x3U << 20) | (0x3U << 22);
+    Clock_Init();
+    SysTick->CTRL = 0;
+    SysTick->LOAD = (HCLK / 1000U) - 1U;
+    SysTick->VAL = 0;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
+
     TIM2_Servo_Init();
-    //Uart2_RX_Interrupt_Enable(start);
-
-    Uart2_Send_String(
-		"SYSTME READY\r\n"
-
-        "\r\n============================\r\n"
-        " STM32 CAMERA Control Test\r\n"
-        " $PU : Pan Up\r\n"
-        " $PD : Pan Down\r\n"
-        " $TU : Tilt Up\r\n"
-        " $TD : Tilt Down TT\r\n"
-        "============================\r\n"
-    );
-
+    Delay_Ms(TEST_HOLD_MS);
+    for (angle = 90U; angle > 0U; --angle)
+    {
+        TIM2_Servo_Set_Tilt_Angle(angle - 1U);
+        Delay_Ms(TEST_STEP_DELAY_MS);
+    }
     for (;;)
     {
-        Command_Receive();
-		//Packet_Receive();
-    }
-}
-
-// ------------------------------------------------------------
-// UART 명령 수신
-// ------------------------------------------------------------
-static void Command_Receive(void)
-{
-    char received_char;
-
-    received_char = Uart2_Get_Pressed();
-
-    if (received_char == 0)
-    {
-        return;
-    }
-
-    if (received_char == '\r' ||
-        received_char == '\n')
-    {
-        if (command_index > 0)
+        Delay_Ms(TEST_HOLD_MS);
+        for (angle = 1U; angle <= 180U; ++angle)
         {
-            command_buffer[command_index] = '\0';
-
-            Uart2_Send_Byte('\n');
-            Uart2_Send_String("RX: ");
-            Uart2_Send_String(command_buffer);
-            Uart2_Send_Byte('\n');
-
-            Command_Process(command_buffer);
-
-            command_index = 0;
-            command_buffer[0] = '\0';
+            TIM2_Servo_Set_Tilt_Angle(angle);
+            Delay_Ms(TEST_STEP_DELAY_MS);
         }
-
-        return;
-    }
-
-    if (received_char == '\b')
-    {
-        if (command_index > 0)
+        Delay_Ms(TEST_HOLD_MS);
+        for (angle = 180U; angle > 0U; --angle)
         {
-            command_index--;
-            command_buffer[command_index] = '\0';
-
-            Uart2_Send_String("\b \b");
+            TIM2_Servo_Set_Tilt_Angle(angle - 1U);
+            Delay_Ms(TEST_STEP_DELAY_MS);
         }
-
-        return;
-    }
-
-    if (command_index < COMMAND_BUFFER_SIZE - 1)
-    {
-        command_buffer[command_index++] = received_char;
-
-        // Tera Term 에코
-        Uart2_Send_Byte(received_char);
-    }
-}
-
-
-// ------------------------------------------------------------
-// 명령 처리
-// ------------------------------------------------------------
-static void Command_Process(char *command)
-{
-    if (strcmp(command, "$PU") == 0)
-    {
-        pan_angle += SERVO_STEP;
-
-        if (pan_angle > SERVO_MAX_ANGLE)
-            pan_angle = SERVO_MAX_ANGLE;
-
-        TIM2_Servo_Set_Pan_Angle((unsigned int)pan_angle);
-
-        Uart2_Send_String("$ACK,PAN,UP\n");
-    }
-    else if (strcmp(command, "$PD") == 0)
-    {
-        pan_angle -= SERVO_STEP;
-
-        if (pan_angle < SERVO_MIN_ANGLE)
-            pan_angle = SERVO_MIN_ANGLE;
-
-        TIM2_Servo_Set_Pan_Angle((unsigned int)pan_angle);
-
-        Uart2_Send_String("$ACK,PAN,DOWN\n");
-    }
-    else if (strcmp(command, "$TU") == 0)
-    {
-        tilt_angle += SERVO_STEP;
-
-        if (tilt_angle > SERVO_MAX_ANGLE)
-            tilt_angle = SERVO_MAX_ANGLE;
-
-        TIM2_Servo_Set_Tilt_Angle((unsigned int)tilt_angle);
-
-        Uart2_Send_String("$ACK,TILT,UP\n");
-    }
-    else if (strcmp(command, "$TD") == 0)
-    {
-        tilt_angle -= SERVO_STEP;
-
-        if (tilt_angle < SERVO_MIN_ANGLE)
-            tilt_angle = SERVO_MIN_ANGLE;
-
-        TIM2_Servo_Set_Tilt_Angle((unsigned int)tilt_angle);
-
-        Uart2_Send_String("$ACK,TILT,DOWN\n");
-    }
-    else if (strcmp(command, "$HELP") == 0)
-    {
-        Uart2_Send_String(
-            "$PU : Pan Up\n"
-            "$PD : Pan Down\n"
-            "$TU : Tilt Up\n"
-            "$TD : Tilt Down\n"
-        );
-    }
-    else
-    {
-        Uart2_Send_String("$NACK,UNKNOWN_COMMAND\n");
     }
 }
