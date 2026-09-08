@@ -13,17 +13,26 @@ static void Sys_Init(int baud)
     LED_Init();
 }
 
+static void delay_ms(volatile uint32_t count)
+{
+    while (count--)
+    {
+        for (volatile int i = 0; i < 3000; i++);
+    }
+}
+
 void Main(void)
 {
     Sys_Init(115200);
     TIM2_Servo_Init();
     Uart2_RX_Interrupt_Enable(1);
 
-    // TIM2_Servo_Set_Pan_Angle(90);
-    // TIM2_Servo_Set_Tilt_Angle(90);
+    TIM2_Servo_Set_Pan_Angle(90);
+    TIM2_Servo_Set_Tilt_Angle(90);
 
     for (;;)
     {
+    
         if (g_packet_ready)
         {
             g_packet_ready = 0; // 플래그 초기화
