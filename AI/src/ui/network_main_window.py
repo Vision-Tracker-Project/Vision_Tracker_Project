@@ -5,8 +5,8 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
 from src.config import (
-    METADATA_PORT, METADATA_STALE_SECONDS, PAN_INITIAL_ANGLE, STREAM_BIND_ADDRESS,
-    TILT_INITIAL_ANGLE, VIDEO_PORT, WINDOW_TITLE,
+    DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, METADATA_PORT, METADATA_STALE_SECONDS,
+    PAN_INITIAL_ANGLE, STREAM_BIND_ADDRESS, TILT_INITIAL_ANGLE, VIDEO_PORT, WINDOW_TITLE,
 )
 from src.streaming.stream_receiver import MetadataReceiver, VideoReceiver
 
@@ -23,25 +23,23 @@ class MainWindow(QMainWindow):
         self.resize(1100, 760)
         self._build_ui()
         self._set_running_state(False)
+        # main.py 실행만으로 영상/메타데이터 수신을 시작한다.
+        QTimer.singleShot(0, self.start_camera)
 
     def _build_ui(self) -> None:
         central = QWidget(self)
         layout = QVBoxLayout(central)
-        self.video_label = QLabel("Jetson 영상 수신 버튼을 누르세요.")
+        self.video_label = QLabel("Jetson 자동 연결 대기 중...")
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setMinimumSize(640, 360)
         self.video_label.setStyleSheet("background-color:#151515;color:#dddddd;")
         layout.addWidget(self.video_label, stretch=1)
         status = QHBoxLayout()
         self.status_label = QLabel("상태: 정지됨")
-        self.video_status_label = QLabel("영상: 정지됨")
         self.face_count_label = QLabel("검출 얼굴: 0")
         self.embedding_label = QLabel("처리 FPS: 0.0")
         self.fps_label = QLabel("표시 FPS: 0.0")
-        for widget in (
-            self.status_label, self.video_status_label, self.face_count_label,
-            self.embedding_label, self.fps_label,
-        ):
+        for widget in (self.status_label, self.face_count_label, self.embedding_label, self.fps_label):
             status.addWidget(widget)
         layout.addLayout(status)
         tracking = QHBoxLayout()
@@ -68,43 +66,37 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def start_camera(self) -> None:
-        if not self.stop_camera():
+        if self.video_receiver and self.video_receiver.isRunning():
             return
-        self.video_receiver = VideoReceiver(VIDEO_PORT, self)
+        self.video_receiver = VideoReceiver(
+            VIDEO_PORT, DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT, self
+        )
         self.metadata_receiver = MetadataReceiver(
             STREAM_BIND_ADDRESS, METADATA_PORT, METADATA_STALE_SECONDS, self
         )
         self.video_receiver.fps_updated.connect(
             lambda fps: self.fps_label.setText(f"표시 FPS: {fps:.1f}")
         )
-        self.video_receiver.connection_changed.connect(self._video_connection_changed)
+        self.video_receiver.connection_changed.connect(self._connection_changed)
         self.metadata_receiver.connection_changed.connect(self._connection_changed)
         self.metadata_receiver.metadata_ready.connect(self._display_metadata)
         self.video_receiver.start()
         self.metadata_receiver.start()
         self.status_label.setText("상태: Jetson 연결 대기...")
-        self.video_status_label.setText("영상: 수신기 시작 중...")
-        self.video_label.setText("Jetson의 첫 영상 프레임을 기다리는 중...")
-        self._last_image = None
         self.frame_timer.start()
         self._set_running_state(True)
 
-    def stop_camera(self) -> bool:
+    def stop_camera(self) -> None:
         self.frame_timer.stop()
         if self.video_receiver and self.video_receiver.isRunning():
             self.video_receiver.stop()
-            if not self.video_receiver.wait(2000):
-                self.video_status_label.setText("영상: 수신기 종료 대기 중...")
-                return False
+            self.video_receiver.wait(2000)
         if self.metadata_receiver and self.metadata_receiver.isRunning():
             self.metadata_receiver.requestInterruption()
-            if not self.metadata_receiver.wait(1000):
-                return False
+            self.metadata_receiver.wait(1000)
         self.video_receiver = self.metadata_receiver = None
         self.status_label.setText("상태: 정지됨")
-        self.video_status_label.setText("영상: 정지됨")
         self._set_running_state(False)
-        return True
 
     def _poll_frame(self) -> None:
         if self.video_receiver:
@@ -114,12 +106,6 @@ class MainWindow(QMainWindow):
 
     def _connection_changed(self, connected: bool, message: str) -> None:
         self.status_label.setText(f"상태: {message}")
-
-    def _video_connection_changed(self, connected: bool, message: str) -> None:
-        self.video_status_label.setText(f"영상: {message}")
-        self.video_status_label.setToolTip(message)
-        if not connected:
-            self.video_label.setText(message)
 
     def _display_frame(self, frame) -> None:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -159,7 +145,5 @@ class MainWindow(QMainWindow):
         self._render_last_image()
 
     def closeEvent(self, event) -> None:
-        if self.stop_camera():
-            event.accept()
-        else:
-            event.ignore()
+        self.stop_camera()
+        event.accept()

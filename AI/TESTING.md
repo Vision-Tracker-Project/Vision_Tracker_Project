@@ -32,6 +32,7 @@ tests/
 
 | 파일 | 확인 내용 |
 |---|---|
+└── test_streaming.py
 | `test_camera_capture.py` | 기본 카메라 설정, 오류 처리, 안전한 해제, 실제 장치 연결 |
 | `test_yunet_detector.py` | 모델 누락 오류, 검출 결과 변환, 얼굴 박스 표시 |
 | `test_sface_extractor.py` | 모델 누락 오류, 128차원 벡터 추출, 잘못된 차원 검사 |
@@ -41,6 +42,7 @@ tests/
 ## 결과 읽는 방법
 
 정상 실행 예시:
+| `test_streaming.py` | 상태 스키마·순서 검사, H.264 파이프라인, 최신 프레임 큐 |
 
 ```text
 test_default_state (...) ... ok

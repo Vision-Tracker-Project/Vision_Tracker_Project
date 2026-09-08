@@ -38,10 +38,12 @@ class CameraCapture:
         camera_index: int = 0,
         width: int = 640,
         height: int = 480,
+        fps: int = 20,
     ) -> None:
         self.camera_index = camera_index
         self.width = width
         self.height = height
+        self.fps = fps
         self._capture: Optional[cv2.VideoCapture] = None
 
     @property
@@ -56,6 +58,7 @@ class CameraCapture:
         self.release()
         backend = cv2.CAP_V4L2 if sys.platform.startswith("linux") else cv2.CAP_ANY
         capture = cv2.VideoCapture(self.camera_index, backend)
+        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
 
         # 드라이버에 따라 명시적 V4L2 열기가 실패할 수 있어 기본 백엔드로 재시도한다.
         if not capture.isOpened() and backend == cv2.CAP_V4L2:
@@ -70,6 +73,8 @@ class CameraCapture:
             )
 
         self._capture = capture
+        capture.set(cv2.CAP_PROP_FPS, float(self.fps))
+        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.width))
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.height))
         return self.get_info()

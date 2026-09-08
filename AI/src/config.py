@@ -7,7 +7,19 @@ from pathlib import Path
 CAMERA_INDEX = 0
 DEFAULT_FRAME_WIDTH = 640
 DEFAULT_FRAME_HEIGHT = 480
+TARGET_FPS = int(os.environ.get("VISION_TARGET_FPS", "20"))
 WINDOW_TITLE = "Jetson Vision Tracker - YuNet + SFace"
+
+# Jetson -> PC 저지연 미리보기와 상태 전송
+STREAM_HOST = os.environ.get("VISION_STREAM_HOST", "").strip()
+STREAM_BIND_ADDRESS = os.environ.get("VISION_STREAM_BIND", "0.0.0.0")
+VIDEO_PORT = int(os.environ.get("VISION_VIDEO_PORT", "5000"))
+METADATA_PORT = int(os.environ.get("VISION_METADATA_PORT", "5001"))
+STREAM_BITRATE = int(os.environ.get("VISION_STREAM_BITRATE", "3000000"))
+STREAM_MTU = int(os.environ.get("VISION_STREAM_MTU", "1200"))
+METADATA_STALE_SECONDS = float(os.environ.get("VISION_METADATA_STALE", "2.0"))
+DISCOVERY_PORT = int(os.environ.get("VISION_DISCOVERY_PORT", "5002"))
+DISCOVERY_INTERVAL_SECONDS = float(os.environ.get("VISION_DISCOVERY_INTERVAL", "1.0"))
 
 AI_ROOT = Path(__file__).resolve().parents[1]
 YUNET_MODEL_PATH = AI_ROOT / "models" / "face_detection_yunet_2023mar.onnx"
@@ -16,6 +28,7 @@ YUNET_NMS_THRESHOLD = 0.3
 YUNET_TOP_K = 5000
 
 SFACE_MODEL_PATH = AI_ROOT / "models" / "face_recognition_sface_2021dec.onnx"
+SFACE_INTERVAL_FRAMES = int(os.environ.get("VISION_SFACE_INTERVAL", "5"))
 
 # 얼굴 중심 추적과 팬·틸트 각도 계산
 PAN_INITIAL_ANGLE = 90
@@ -33,7 +46,7 @@ TRACKING_MAX_STEP_DEGREES = 4.0
 SERVO_SEND_INTERVAL_SECONDS = 0.1
 
 # Jetson -> STM32 UART. 실제 장치명이 다르면 VISION_UART_PORT로 변경 가능.
-UART_PORT = os.environ.get("VISION_UART_PORT", "/dev/ttyUSB0")
+UART_PORT = os.environ.get("VISION_UART_PORT", "/dev/ttyACM0")
 UART_BAUD_RATE = 115200
 UART_WRITE_TIMEOUT_SECONDS = 0.2
 UART_RETRY_INTERVAL_SECONDS = 2.0
