@@ -7,7 +7,7 @@ from pathlib import Path
 CAMERA_INDEX = 0
 DEFAULT_FRAME_WIDTH = 640
 DEFAULT_FRAME_HEIGHT = 480
-WINDOW_TITLE = "Jetson Vision Tracker - YuNet + SFace"
+WINDOW_TITLE = "Jetson Vision Tracker - Nano Pose + ReID"
 
 AI_ROOT = Path(__file__).resolve().parents[1]
 YUNET_MODEL_PATH = AI_ROOT / "models" / "face_detection_yunet_2023mar.onnx"
@@ -16,6 +16,16 @@ YUNET_NMS_THRESHOLD = 0.3
 YUNET_TOP_K = 5000
 
 SFACE_MODEL_PATH = AI_ROOT / "models" / "face_recognition_sface_2021dec.onnx"
+
+# 다중 인물 Pose와 ByteTrack
+POSE_ENGINE_PATH = AI_ROOT / "models" / "yolo11n-pose.engine"
+POSE_MODEL_PATH = POSE_ENGINE_PATH if POSE_ENGINE_PATH.is_file() else AI_ROOT / "models" / "yolo11n-pose.pt"
+POSE_CONFIDENCE = 0.35
+POSE_IMAGE_SIZE = 640
+POSE_DEVICE = os.environ.get("VISION_POSE_DEVICE") or None
+PERSON_REID_THRESHOLD = 0.86
+PERSON_REID_MARGIN = 0.06
+PERSON_LOST_TIMEOUT_SECONDS = 3.0
 
 # 얼굴 중심 추적과 팬·틸트 각도 계산
 PAN_INITIAL_ANGLE = 90
@@ -44,10 +54,6 @@ PAN_TARGET_ID = 0x01
 TILT_TARGET_ID = 0x02
 SET_ANGLE_ACTION = 0x01
 
-# 로컬 프레임 다시보기
-REPLAY_BUFFER_SECONDS = 60.0
-REPLAY_JPEG_QUALITY = 80
-
-# 실시간·다시보기 화면 캡처
+# 실시간 화면 캡처
 CAPTURE_DEFAULT_DIR = AI_ROOT / "captures"
 CAPTURE_FLASH_MILLISECONDS = 250

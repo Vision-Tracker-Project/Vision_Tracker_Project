@@ -1,0 +1,30 @@
+[Unit]
+Description=Vision Tracker camera AI and web controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=@PROJECT_ROOT@/WEB
+ExecStart=@PROJECT_ROOT@/AI/.venv/bin/python -m uvicorn rc_web.app:app --host 0.0.0.0 --port 8000 --workers 1 --no-proxy-headers --no-access-log
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=VISION_AUTOSTART_CAMERA=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# 카메라와 기존 팬·틸트 UART 경로 사용.
+PrivateDevices=false
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

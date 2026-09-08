@@ -31,7 +31,7 @@ AI/
 │   ├── buffer/frame_buffer_worker.py
 │   ├── capture/frame_capture.py
 │   ├── workers/video_worker.py
-│   └── ui/main_window.py
+│   └── workers/events.py
 └── tests/
     ├── test_camera_capture.py
     ├── test_yunet_detector.py
@@ -42,80 +42,23 @@ AI/
     └── test_frame_capture.py
 ```
 
-## Jetson 설치
+## 설치 및 웹 실행
 
-Jetson ARM64에서는 PyPI의 PyQt5 wheel이 없어 소스 빌드 오류 발생 가능. Ubuntu의 시스템 PyQt5 사용 권장.
-
-```bash
-sudo apt update
-sudo apt install python3-pyqt5
-```
-
-Jetson의 시스템 OpenCV와 PyQt5를 공유하도록 가상환경 생성.
+PyQt GUI는 제거되었습니다. 카메라·추론은 Python 스레드에서 실행하고 웹 화면으로 표시합니다.
 
 ```bash
 cd ~/work/Vision_Tracker_Project/AI
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
-python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
-```
-
-기존 `.venv/pyvenv.cfg`에 아래 설정이 있으면 가상환경 재생성 불필요.
-
-```text
-include-system-site-packages = true
-```
-
-설치 확인 명령은 다음과 같음.
-
-```bash
-python3 -c "import cv2; print(cv2.__version__)"
-python3 -c "from PyQt5.QtCore import PYQT_VERSION_STR; print(PYQT_VERSION_STR)"
-python3 -c "import serial; print(serial.__version__)"
-```
-
-## Qt xcb 오류 확인
-
-pip OpenCV가 Qt 플러그인 경로를 OpenCV 패키지 내부로 변경할 수 있음. 앱 시작 시 PyQt5의 실제 플러그인 경로로 복원하도록 구현.
-
-```bash
-python3 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.PluginsPath))"
-```
-
-Jetson Ubuntu의 일반적인 출력 경로는 다음과 같음.
-
-```text
-/usr/lib/aarch64-linux-gnu/qt5/plugins
-```
-
-`xcb` 오류 지속 시 누락된 공유 라이브러리 확인 가능.
-
-```bash
-ldd /usr/lib/aarch64-linux-gnu/qt5/plugins/platforms/libqxcb.so | grep "not found"
-```
-
-## 실행
-
-```bash
-cd ~/work/Vision_Tracker_Project/AI
-source .venv/bin/activate
 python3 main.py
 ```
 
-`카메라 ON` 선택 시 `/dev/video0`을 `640×480`으로 열고 YuNet 검출, SFace 추출, 최근 프레임 저장 시작. 얼굴 박스를 확인한 뒤 `추적 시작` 선택 시 팬·틸트 각도 계산과 UART 전송 시작. `추적 정지` 선택 시 얼굴 검출과 영상 표시는 유지하고 UART 전송 중단. 시간 슬라이더로 최근 60초 확인 가능. `카메라 OFF` 선택 시 전체 처리 중지, UART 연결 종료 및 카메라 해제.
+기존 OpenCV가 설치된 가상환경은 재사용 가능합니다. 브라우저에서 `http://<Jetson-WiFi-IP>:8000`으로 접속합니다. 전체 사용법과 FPS 측정 절차는 [WEB/README.md](../WEB/README.md), 부팅 실행은 [AUTOSTART/README.md](../AUTOSTART/README.md)를 참고하세요.
 
-기본 UART 장치는 `/dev/ttyACM07`, 통신 속도는 115200bps. 다른 장치 사용 시 실행 전에 환경 변수 지정.
+카메라 ON/OFF, 얼굴 검출·특징 추출, 팬틸트 추적, 최근 60초 다시보기는 웹에서 사용합니다. 현재 화면 PNG는 브라우저 다운로드로 접속 기기에 저장합니다. 추적은 기본 OFF이며 AI 모드에서 추적 시작을 눌러야 UART 패킷을 전송합니다.
 
-```bash
-VISION_UART_PORT=/dev/ttyACM1 python3 main.py
-```
-
-패킷과 추적 설정은 `UART.md`, 장치 주소·권한 오류는 `TROUBLESHOOTING.md` 참고.
-
-최근 프레임 다시보기 설정은 `REPLAY.md` 참고.
-
-실시간 또는 다시보기 화면에서 `현재 화면 캡처` 선택 시 현재 표시 프레임을 PNG로 저장. `저장 폴더 선택`으로 경로 변경 가능. 자세한 내용은 `CAPTURE.md` 참고.
+기본 UART는 `/dev/ttyACM0`, 115200bps. 다른 장치는 `VISION_UART_PORT`로 지정합니다.
 
 ## 카메라 확인
 

@@ -1,4 +1,4 @@
-"""실시간 또는 다시보기 프레임을 PNG 파일로 저장."""
+"""실시간 프레임을 PNG 파일로 저장."""
 
 from datetime import datetime
 from pathlib import Path
@@ -26,7 +26,7 @@ class FrameCapture:
     def save(self, frame: np.ndarray, source: str) -> Path:
         if frame is None or frame.size == 0:
             raise CaptureError("캡처할 화면이 없습니다.")
-        if source not in {"live", "replay"}:
+        if source != "live":
             raise CaptureError(f"알 수 없는 캡처 화면 종류: {source}")
 
         try:

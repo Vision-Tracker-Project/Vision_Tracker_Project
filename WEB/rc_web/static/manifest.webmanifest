@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "Jetson RC 명령 확인",
+  "short_name": "Jetson RC",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d1726",
+  "theme_color": "#0d1726",
+  "icons": [{"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
