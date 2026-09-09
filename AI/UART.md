@@ -1,5 +1,7 @@
 # 팬·틸트 UART 전송
 
+> 차량 제어 통합 후 실행은 기본 dry-run입니다. 실제 UART는 `python main.py --uart /dev/ttyTHS1`처럼 명시해야 합니다. 아래 환경 변수만으로는 열리지 않습니다. 영상 작업자는 이제 서보 패킷을 메일박스에 제출하며 독립 제어 루프가 UART를 소유합니다. 상세: [GAMEPAD.md](GAMEPAD.md).
+
 ## 처리 흐름
 
 ```text

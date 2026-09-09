@@ -1,5 +1,7 @@
 # AI 모듈 구조
 
+차량 제어는 `src/control/`의 독립 루프에서 실행합니다. `ControlService`가 UART를 단독 소유하고 영상 작업자는 `ServoMailbox`에 최신 서보 패킷을 제출합니다. 프레임 지연이 차량 입력 처리를 막지 않습니다. 실행·프로토콜·향후 서보 펌웨어 통합은 [GAMEPAD.md](GAMEPAD.md)를 참고하세요.
+
 ```text
 AI/
 ├── main.py                   # 프로그램 실행 진입점

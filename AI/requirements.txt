@@ -2,6 +2,7 @@
 numpy>=1.23
 opencv-python>=4.8
 pyserial>=3.5
+evdev>=1.6; sys_platform == "linux"
 
 # PyPI는 Jetson ARM64용 PyQt5 wheel을 제공하지 않아 소스 빌드(qmake)가 시작됩니다.
 # ARM64에서는 INSTALL.md대로 Ubuntu의 python3-pyqt5 패키지를 사용합니다.

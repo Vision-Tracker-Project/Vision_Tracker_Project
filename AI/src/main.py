@@ -2,11 +2,13 @@
 
 import os
 import sys
+import signal
+import logging
 
 
 def main() -> int:
     try:
-        from PyQt5.QtCore import QLibraryInfo
+        from PyQt5.QtCore import QLibraryInfo, QTimer
         from PyQt5.QtWidgets import QApplication
     except ImportError:
         print(
@@ -26,9 +28,22 @@ def main() -> int:
     os.environ.pop("QT_QPA_FONTDIR", None)
 
     application = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    return application.exec_()
+    signal_timer = QTimer(application)
+    signal_timer.timeout.connect(lambda: None)
+    signal_timer.start(100)
+    from src.control.__main__ import create_service
+    logging.basicConfig(level=logging.INFO)
+    service = create_service()
+    window = MainWindow(service)
+    application.aboutToQuit.connect(service.stop)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: (service.stop(), application.quit()))
+    service.start()
+    try:
+        window.show()
+        return application.exec_()
+    finally:
+        service.stop()
 
 
 if __name__ == "__main__":

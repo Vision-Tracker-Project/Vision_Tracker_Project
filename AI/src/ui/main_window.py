@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
 )
 
 from src.camera.camera_capture import CameraCapture
-from src.communication.uart_sender import UartSender
 from src.config import (
     CAMERA_INDEX,
     DEFAULT_FRAME_HEIGHT,
@@ -49,8 +48,9 @@ from src.workers.video_worker import VideoWorker
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, control_service) -> None:
         super().__init__()
+        self.control_service = control_service
         self.worker = None
         self._last_image = None
         self.setWindowTitle(WINDOW_TITLE)
@@ -142,11 +142,7 @@ class MainWindow(QMainWindow):
             pan_inverted=PAN_INVERTED,
             tilt_inverted=TILT_INVERTED,
         )
-        uart_sender = UartSender(
-            port=UART_PORT,
-            baud_rate=UART_BAUD_RATE,
-            write_timeout=UART_WRITE_TIMEOUT_SECONDS,
-        )
+        uart_sender = self.control_service.mailbox
         self.worker = VideoWorker(
             camera,
             detector,
@@ -280,6 +276,7 @@ class MainWindow(QMainWindow):
         self._render_last_image()
 
     def closeEvent(self, event) -> None:
+        self.control_service.stop()
         if self.worker is not None and self.worker.isRunning():
             self.worker.request_stop()
             if not self.worker.wait(3000):
