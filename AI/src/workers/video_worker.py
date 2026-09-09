@@ -1,4 +1,4 @@
-"""카메라 캡처와 Pose 처리를 분리한 최신 프레임 작업자."""
+"""카메라 캡처와 사람 검출을 분리한 최신 프레임 작업자."""
 
 from collections import deque
 import threading
@@ -9,7 +9,7 @@ from src.camera.camera_capture import CameraCapture, CameraError
 from src.communication.protocol import build_servo_packet
 from src.communication.uart_sender import UartError, UartSender
 from src.config import PAN_TARGET_ID, TILT_TARGET_ID
-from src.detection.pose_detector import PoseDetectorError
+from src.detection.person_detector import PersonDetectorError
 
 
 class VideoWorker(threading.Thread):
@@ -26,7 +26,7 @@ class VideoWorker(threading.Thread):
         self.capture_fps_updated = Event()
         self.processing_updated = Event()
         self.people_updated = Event()
-        self.pose_status_updated = Event()
+        self.detector_status_updated = Event()
         self.target_status_updated = Event()
         self.tracking_updated = Event()
         self.uart_status_updated = Event()
@@ -149,16 +149,20 @@ class VideoWorker(threading.Thread):
                 height, width = frame.shape[:2]
                 tracking_enabled = self.is_tracking_enabled
                 tracking = None
+                send_due = started_at - last_servo_send >= self.send_interval
                 if not self.raw_mode:
                     tracking = self.tracker.update(
-                        detections, frame, (width, height), move_servos=tracking_enabled
+                        detections, frame, (width, height),
+                        move_servos=tracking_enabled,
+                        control_step_due=(
+                            tracking_enabled and self.uart_sender.is_open and send_due
+                        ),
                     )
 
                 if tracking_enabled and tracking is not None:
                     pan_packet = build_servo_packet(PAN_TARGET_ID, tracking.pan_angle)
                     tilt_packet = build_servo_packet(TILT_TARGET_ID, tracking.tilt_angle)
                     sent = False
-                    send_due = started_at - last_servo_send >= self.send_interval
                     if self.uart_sender.is_open and send_due and tracking.angles_changed:
                         try:
                             self.uart_sender.send((pan_packet, tilt_packet))
@@ -187,13 +191,12 @@ class VideoWorker(threading.Thread):
                     "track_id": person.track_id,
                     "box": list(person.box),
                     "confidence": person.confidence,
-                    "visible_keypoints": person.visible_keypoints,
                     "reid_similarity": person.reid_similarity,
                     "selected": person.track_id == self.tracker.selected_id,
                 } for person in detections])
-                self.pose_status_updated.emit({
+                self.detector_status_updated.emit({
                     "inference_ms": self.detector.elapsed_ms if self.detector else 0.0,
-                    "model": getattr(self.detector, "model_name", "Nano Pose") if self.detector else None,
+                    "model": getattr(self.detector, "model_name", "YOLO Person") if self.detector else None,
                 })
                 self.target_status_updated.emit(self.tracker.status())
                 self.frame_ready.emit(frame, captured_at)
@@ -210,7 +213,7 @@ class VideoWorker(threading.Thread):
                 if completed_at - last_fps_emit >= 0.5:
                     self.fps_updated.emit(float(len(output_timestamps)))
                     last_fps_emit = completed_at
-        except (CameraError, PoseDetectorError) as error:
+        except (CameraError, PersonDetectorError) as error:
             self.error_occurred.emit(str(error))
         except Exception as error:
             self.error_occurred.emit(f"예상하지 못한 영상 처리 오류: {error}")

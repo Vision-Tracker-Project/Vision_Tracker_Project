@@ -102,14 +102,12 @@
       if (state.tracking)
         $('vision-status').textContent += ` · 팬 ${state.tracking.pan_angle}° / 틸트 ${state.tracking.tilt_angle}°`;
       const target = state.target || {};
-      const pose = state.pose || {};
-      const selected = (state.people || []).find(person => person.selected);
+      const detector = state.detector || {};
       $('target-id').textContent = target.selected_id == null ? '선택 안 됨' : `ID ${target.selected_id}`;
       $('target-state').textContent = target.state || '선택 대기';
-      $('pose-detail').textContent = `${pose.model || 'Nano Pose'} · ${number(pose.inference_ms).toFixed(1)}ms` +
-        (selected ? ` · 관절 ${selected.visible_keypoints}/17` : '');
+      $('detector-detail').textContent = `${detector.model || 'YOLO Person'} · ${number(detector.inference_ms).toFixed(1)}ms`;
       $('people-list').textContent = (state.people || []).length ? '검출: ' + state.people.map(person =>
-        `ID ${person.track_id} (${(person.confidence * 100).toFixed(0)}%, 관절 ${person.visible_keypoints}/17)`).join(' · ') :
+        `ID ${person.track_id} (${(person.confidence * 100).toFixed(0)}%)`).join(' · ') :
         '검출 인물 없음';
       $('reid-similarity').textContent = target.reid_similarity == null ? '수집 중' :
         `${(target.reid_similarity * 100).toFixed(1)}%` +

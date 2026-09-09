@@ -24,13 +24,13 @@
     </header>
     <div class="notice"><span class="dot"></span>수동 방향 명령: 수신 검증 모드 · 하드웨어 전송 없음</div>
     <section class="card vision-panel">
-      <h2>Vision Tracker · 인물 Pose / ReID</h2>
+      <h2>Vision Tracker · 사람 검출 / ReID</h2>
       <canvas id="video" width="640" height="480" aria-label="추적할 사람을 선택하는 카메라 화면"></canvas>
       <p class="target-help">실시간 화면에서 추적할 사람을 누르세요. 빈 곳을 누르면 선택이 해제됩니다.</p>
       <p id="vision-status" role="status">카메라 상태 확인 중</p>
       <div class="vision-actions">
         <select id="vision-mode" aria-label="카메라 모드">
-          <option value="ai">Nano Pose + ReID 영상</option><option value="raw">JPEG 영상 (AI 끔)</option>
+          <option value="ai">YOLO Person + ReID 영상</option><option value="raw">JPEG 영상 (AI 끔)</option>
           <option value="camera">카메라만 (기준 FPS, 영상 없음)</option>
         </select>
         <button id="camera-on">카메라 ON</button><button id="camera-off">카메라 OFF</button>
@@ -42,13 +42,13 @@
       <dl class="vision-detail">
         <div><dt>선택 대상</dt><dd id="target-id">선택 안 됨</dd></div>
         <div><dt>추적 상태</dt><dd id="target-state">선택 대기</dd></div>
-        <div><dt>Pose</dt><dd id="pose-detail">대기</dd></div>
+        <div><dt>사람 검출</dt><dd id="detector-detail">대기</dd></div>
         <div><dt>ReID 유사도</dt><dd id="reid-similarity">—</dd></div>
         <div><dt>ReID 프로필</dt><dd id="reid-profile">0장</dd></div>
         <div><dt>ReID 방식</dt><dd id="reid-method">—</dd></div>
       </dl>
       <button id="benchmark">30초 수신 측정</button><pre id="benchmark-result" style="white-space:pre-wrap"></pre>
-      <p class="hint">대상 선택과 Pose 분석은 계속 실행됩니다. 팬·틸트 시작 버튼은 선택된 대상의 UART 제어를 활성화합니다.</p>
+      <p class="hint">대상 선택과 사람 검출은 계속 실행됩니다. 팬·틸트 시작 버튼은 선택된 대상의 UART 제어를 활성화합니다.</p>
     </section>
     <div class="panels">
       <section class="card controls" aria-labelledby="control-title">

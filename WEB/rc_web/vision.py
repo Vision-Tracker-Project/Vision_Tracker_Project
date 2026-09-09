@@ -20,7 +20,7 @@ class VisionService:
         self.session = uuid.uuid4().hex
         self.samples = deque(maxlen=600)
         self.state = {'error': None, 'mode': 'ai', 'people': [], 'tracking': None,
-                      'tracking_enabled': False, 'uart': '대기', 'pose': None,
+                      'tracking_enabled': False, 'uart': '대기', 'detector': None,
                       'target': None,
                       'capture_fps': 0.0, 'ai_fps': 0.0, 'processing_ms': 0.0,
                       'frame_age_ms': 0.0, 'inference_frames_skipped': 0}
@@ -35,21 +35,31 @@ class VisionService:
         from src import config as c
         from src.camera.camera_capture import CameraCapture
         from src.communication.uart_sender import UartSender
-        from src.detection.pose_detector import PoseDetector
+        from src.detection.person_detector import PersonDetector
         from src.recognition.appearance_reid import AppearanceReIdentifier
         from src.tracking.person_tracker import PersonTracker
         from src.workers.video_worker import VideoWorker
         with self.control:
             if self.worker and self.worker.is_alive():
                 raise RuntimeError('카메라 OFF 후 모드를 변경하세요.')
-            detector = PoseDetector(c.POSE_MODEL_PATH, confidence=c.POSE_CONFIDENCE,
-                                    image_size=c.POSE_IMAGE_SIZE,
-                                    device=c.POSE_DEVICE) if mode == 'ai' else None
+            detector = PersonDetector(c.PERSON_MODEL_PATH, confidence=c.PERSON_CONFIDENCE,
+                                      image_size=c.PERSON_IMAGE_SIZE,
+                                      device=c.PERSON_DEVICE) if mode == 'ai' else None
             tracker = PersonTracker(AppearanceReIdentifier(),
                 pan_initial=c.PAN_INITIAL_ANGLE, tilt_initial=c.TILT_INITIAL_ANGLE,
                 pan_range=(c.PAN_MIN_ANGLE, c.PAN_MAX_ANGLE), tilt_range=(c.TILT_MIN_ANGLE, c.TILT_MAX_ANGLE),
-                filter_alpha=c.TRACKING_FILTER_ALPHA, dead_zone_ratio=c.TRACKING_DEAD_ZONE_RATIO,
+                filter_alpha=c.TRACKING_FILTER_ALPHA,
                 gain=c.TRACKING_GAIN, max_step_degrees=c.TRACKING_MAX_STEP_DEGREES,
+                box_history_size=c.TRACKING_BOX_HISTORY_SIZE,
+                boundary_confirm_frames=c.TRACKING_BOUNDARY_CONFIRM_FRAMES,
+                pan_confirm_frames=c.TRACKING_PAN_CONFIRM_FRAMES,
+                tilt_confirm_frames=c.TRACKING_TILT_CONFIRM_FRAMES,
+                settle_seconds=c.TRACKING_SETTLE_SECONDS,
+                pan_start_margin=c.TRACKING_PAN_START_MARGIN,
+                pan_release_margin=c.TRACKING_PAN_RELEASE_MARGIN,
+                head_box_ratio=c.TRACKING_HEAD_BOX_RATIO,
+                head_start_band=(c.TRACKING_HEAD_START_TOP, c.TRACKING_HEAD_START_BOTTOM),
+                head_release_band=(c.TRACKING_HEAD_RELEASE_TOP, c.TRACKING_HEAD_RELEASE_BOTTOM),
                 pan_inverted=c.PAN_INVERTED, tilt_inverted=c.TILT_INVERTED,
                 reid_threshold=c.PERSON_REID_THRESHOLD, reid_margin=c.PERSON_REID_MARGIN,
                 lost_timeout=c.PERSON_LOST_TIMEOUT_SECONDS)
@@ -65,12 +75,12 @@ class VisionService:
                 self.session = uuid.uuid4().hex
                 self.samples.clear()
                 self.state.update(error=None, mode=mode, people=[], tracking=None,
-                                  tracking_enabled=False, pose=None, target=None, uart='대기',
+                                  tracking_enabled=False, detector=None, target=None, uart='대기',
                                   capture_fps=0.0, ai_fps=0.0, processing_ms=0.0,
                                   frame_age_ms=0.0, inference_frames_skipped=0)
             worker.camera_opened.connect(lambda info: self.update(camera=asdict(info)))
             worker.people_updated.connect(lambda people: self.update(people=people))
-            worker.pose_status_updated.connect(lambda value: self.update(pose=value))
+            worker.detector_status_updated.connect(lambda value: self.update(detector=value))
             worker.target_status_updated.connect(lambda value: self.update(target=value))
             worker.capture_fps_updated.connect(lambda fps: self.update(capture_fps=fps))
             worker.fps_updated.connect(lambda fps: self.update(ai_fps=fps))
