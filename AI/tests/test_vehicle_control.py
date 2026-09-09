@@ -27,13 +27,34 @@ def axes(c, x, y):
 
 
 def enabled():
-    c = Controller(Settings(speeds=(40, 60, 100), spin_limit=30))
+    c = Controller(Settings(speeds=(40, 60, 100), spin_limit=30, inner_ratio=0.5, diagonal_outer=40))
     c.resync(0, 0)
     button(c, "enable")
     return c
 
 
 class InputTest(unittest.TestCase):
+    def test_default_vehicle_pwm_table(self):
+        expected = {(0,-1):(80,80), (0,1):(-80,-80), (-1,0):(-80,80),
+                    (1,0):(80,-80), (-1,-1):(80,100), (1,-1):(100,80),
+                    (-1,1):(-80,-100), (1,1):(-100,-80), (0,0):(0,0)}
+        c = Controller()
+        c.resync(0, 0)
+        button(c, "enable")
+        for xy, pair in expected.items():
+            with self.subTest(xy=xy):
+                axes(c, *xy)
+                self.assertEqual(c.output(), pair)
+        button(c, "faster")
+        axes(c, 0, -1)
+        self.assertEqual(c.output(), (90,90))
+        axes(c, -1, -1)
+        self.assertEqual(c.output(), (80,100))
+        axes(c, -1, 0)
+        self.assertEqual(c.output(), (-80,80))
+        c.event("button", "enable", 0)
+        self.assertEqual(c.output(), (0,0))
+
     def test_eight_directions_and_neutral(self):
         expected = {(0,-1):(40,40), (0,1):(-40,-40), (-1,0):(-30,30),
                     (1,0):(30,-30), (-1,-1):(20,40), (1,-1):(40,20),

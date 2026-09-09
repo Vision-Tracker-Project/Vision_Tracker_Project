@@ -4,16 +4,18 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
-    speeds: tuple = (25, 45, 65)
+    speeds: tuple = (80, 90, 100)
     initial: int = 0
-    inner_ratio: float = 0.5
-    spin_limit: int = 35
+    inner_ratio: float = 0.8
+    spin_limit: int = 80
+    diagonal_outer: int = 100
 
     def __post_init__(self):
         if (not self.speeds or any(type(v) is not int or not 0 < v <= 100 for v in self.speeds)
                 or tuple(sorted(set(self.speeds))) != tuple(self.speeds)
                 or not 0 <= self.initial < len(self.speeds)
-                or not 0 <= self.inner_ratio <= 1 or not 0 <= self.spin_limit <= 100):
+                or not 0 <= self.inner_ratio <= 1 or not 0 <= self.spin_limit <= 100
+                or type(self.diagonal_outer) is not int or not 0 < self.diagonal_outer <= 100):
             raise ValueError("Invalid vehicle settings")
 
 
@@ -97,7 +99,7 @@ class Controller:
             return (0, 0)
         speed = self.settings.speeds[self.level]
         if self.y:
-            left = right = -self.y * speed
+            left = right = -self.y * (self.settings.diagonal_outer if self.x else speed)
             if self.x < 0:
                 left = round(left * self.settings.inner_ratio)
             elif self.x > 0:

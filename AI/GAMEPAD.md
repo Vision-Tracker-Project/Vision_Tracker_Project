@@ -34,7 +34,7 @@ GUI의 실제 UART도 `--uart 경로`가 필요하다. 과거 `VISION_UART_PORT`
 
 ## 입력·안전 정책
 
-축 최신값은 SYN_REPORT에서 한 쌍으로 확정된다. 위/아래는 전후진, 좌우 단독은 제자리 회전이다. 전후진 대각선은 입력 쪽 바퀴를 `inner_ratio`만큼 낮춘다. 후진 대각선도 후진 경로가 입력 방향으로 휜다는 기준이다. 출력은 -100..100이며 제자리 회전은 `spin_limit`로 제한한다. 속도 단계와 초기 단계(0부터)는 JSON 설정이다.
+축 최신값은 SYN_REPORT에서 한 쌍으로 확정된다. 위/아래는 전후진, 좌우 단독은 제자리 회전이다. 전후진 대각선은 입력 쪽 바퀴를 `inner_ratio`만큼 낮춘다. 후진 대각선도 후진 경로가 입력 방향으로 휜다는 기준이다. 출력은 -100..100이며 제자리 회전은 `spin_limit`로 제한한다. 기본 속도 단계는 80/90/100%이며 초기 단계는 0(80%)이다. 속도 단계와 초기 단계(0부터)는 JSON 설정이다. 기존 사용자 JSON의 `settings.speeds`가 있으면 기본값보다 우선하므로 `[80, 90, 100]`으로 맞춘다. 제자리 회전 제한은 80%다. 대각선은 속도 단계와 독립적으로 `diagonal_outer`(기본 100%)를 바깥쪽에, 여기에 `inner_ratio`(기본 0.8)를 곱한 80%를 안쪽에 적용한다. 속도 버튼은 직진·후진 단계만 변경하며 기본 제자리 회전은 80%, 대각선은 80/100%로 유지된다. Jetson의 기존 `gamepad.local.json`에서도 `speeds: [80, 90, 100]`, `initial: 0`, `inner_ratio: 0.8`, `spin_limit: 80`, `diagonal_outer: 100`으로 설정해야 한다. 버튼 매핑은 보존한다.
 
 최초 연결·재연결·SYN_DROPPED·UART 오류·제어 루프 지연 후에는 방향 중립, A 해제, A의 **새 누름** 순서가 필요하다. A를 계속 누르고 있던 상태로는 재출발하지 않는다. B는 **소프트웨어 정지 잠금**이며 하드웨어 비상정지가 아니다. B를 놓는 것만으로 풀리지 않으며 B 해제 후 방향 중립·A 해제·새 누름으로 재활성화한다. A 해제와 B 누름은 SYN_REPORT 전에도 출력을 억제한다.
 
@@ -75,7 +75,7 @@ GUI의 실제 UART도 `--uart 경로`가 필요하다. 과거 `VISION_UART_PORT`
 
 전진은 각각 IN1/IN2=1/0, IN3/IN4=1/0이다. `VEHICLE_LEFT_INVERT`, `VEHICLE_RIGHT_INVERT`를 1로 정의하면 장착 방향을 보정한다.
 
-현재 `clock.c`: HSI 16 MHz / PLLM 8 × PLLN 192 / PLLP 4 = SYSCLK/HCLK 96 MHz. APB1 분주 2로 PCLK1=48 MHz, TIM3=96 MHz. TIM3 PSC=0, ARR=9599로 기본 10 kHz다. 두 CCR은 공통 주파수·독립 듀티이며 preload를 함께 갱신한다. 10 kHz는 L298의 스위칭 한계보다 낮게 잡은 초기값이며 발열·가청음을 실측해 조정한다. `VEHICLE_PWM_HZ`는 1~20 kHz 범위에서 설정 가능하다. 주파수는 실제로 `96 MHz/(ARR+1)`이다.
+현재 `clock.c`: HSI 16 MHz / PLLM 8 × PLLN 192 / PLLP 4 = SYSCLK/HCLK 96 MHz. APB1 분주 2로 PCLK1=48 MHz, TIM3=96 MHz. TIM3 PSC=0, ARR=4799로 기본 20 kHz다. 두 CCR은 공통 주파수·독립 듀티이며 preload를 함께 갱신한다. PWM 기본 주파수를 10 kHz에서 20 kHz로 변경했다. 발열·파형·모터 동작은 실측해 확인한다. `VEHICLE_PWM_HZ`는 1~20 kHz 범위에서 설정 가능하다. 주파수는 실제로 `96 MHz/(ARR+1)`이다.
 
 `vehicle.h`의 기본값은 가속 100 %포인트/초, 방향 전환 대기 100 ms, watchdog 250 ms다. 반전 시 즉시 0으로 낮추고 대기 후 반대 방향으로 가속한다. 정지 후에도 마지막 방향과 0 시각을 유지해 빠른 재누름으로 반전 대기를 우회하지 않는다. 정지·watchdog은 가속 램프를 거치지 않는다. SysTick도 별도로 PWM 출력을 차단하므로 메인 루프 정지 시에도 차단한다(인터럽트 자체가 정지하면 보장하지 못함).
 
@@ -93,6 +93,6 @@ GUI의 실제 UART도 `--uart 경로`가 필요하다. 과거 `VISION_UART_PORT`
 
 RX 버퍼는 수신 시각도 저장한다. watchdog은 메인에서 늦게 파싱한 시각이 아니라 유효 프레임의 마지막 바이트 수신 시각을 사용하며, 이미 만료한 버퍼 데이터는 폐기한다. 반전 대기는 실제 정지 적용 시각을 사용한다.
 
-하드웨어 팀과 확인할 항목: 측정한 버튼 코드, ENA/ENB 점퍼 제거와 비활성 pull-down, 공통 GND·전압 레벨·모터 전원/전류 및 역기전력 보호, 좌우 극성과 실제 coast 거리, 10 kHz 발열·파형·반전 대기 시간, 게임패드 제거/USB UART 제거/Jetson 루프 정지 시 차단 시간. Jetson GPIO UART를 PA2/PA3에 직접 연결할 경우 Nucleo의 ST-LINK VCP 연결 solder bridge와 충돌 여부를 해당 보드 리비전 회로도로 확인한다. 실제 모터 구동·업로드는 수행하지 않았다.
+하드웨어 팀과 확인할 항목: 측정한 버튼 코드, ENA/ENB 점퍼 제거와 비활성 pull-down, 공통 GND·전압 레벨·모터 전원/전류 및 역기전력 보호, 좌우 극성과 실제 coast 거리, 20 kHz 발열·파형·반전 대기 시간, 게임패드 제거/USB UART 제거/Jetson 루프 정지 시 차단 시간. Jetson GPIO UART를 PA2/PA3에 직접 연결할 경우 Nucleo의 ST-LINK VCP 연결 solder bridge와 충돌 여부를 해당 보드 리비전 회로도로 확인한다. 실제 모터 구동·업로드는 수행하지 않았다.
 
 근거: [ST DS10314, 핀·AF 표](https://www.st.com/resource/en/datasheet/stm32f411re.pdf), [ST RM0383, RCC/TIM3](https://www.st.com/resource/en/reference_manual/dm00119316.pdf), [ST UM1724, Nucleo morpho·USART2 연결](https://www.st.com/resource/en/user_manual/um1724-.pdf), [ST L298 데이터시트](https://www.st.com/resource/en/datasheet/l298.pdf).

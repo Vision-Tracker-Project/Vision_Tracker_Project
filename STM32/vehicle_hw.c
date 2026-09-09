@@ -3,7 +3,7 @@
 #include "vehicle_hw.h"
 
 #ifndef VEHICLE_PWM_HZ
-#define VEHICLE_PWM_HZ 10000u
+#define VEHICLE_PWM_HZ 20000u
 #endif
 #ifndef VEHICLE_LEFT_INVERT
 #define VEHICLE_LEFT_INVERT 0
