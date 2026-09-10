@@ -156,7 +156,17 @@ class VisionService:
             samples = [x for x in self.samples if now-x[0] <= 5]
             span = samples[-1][0]-samples[0][0] if len(samples)>1 else 0
             fps = (len(samples)-1)/span if span and self.worker and self.worker.is_alive() else 0
-            return {**self.state, 'running': bool(self.worker and self.worker.is_alive()),
+            uart = self.state['uart']
+            if self.control_service is not None:
+                sender = self.control_service.sender
+                if sender is None:
+                    uart = '비활성 — UART 포트 미설정'
+                elif sender.is_open:
+                    uart = f'연결됨 — {sender.port} {sender.baud_rate}bps'
+                else:
+                    uart = f'재연결 대기 — {sender.port}'
+            return {**self.state, 'uart': uart,
+                    'running': bool(self.worker and self.worker.is_alive()),
                     'session': self.session, 'sequence': self.sequence, 'server_fps': fps,
                     'jpeg_ms': sum(x[1] for x in samples)/len(samples) if samples else 0,
                     'jpeg_bytes': sum(x[2] for x in samples)/len(samples) if samples else 0,

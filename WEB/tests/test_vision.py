@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from rc_web.app import create_app
 import numpy as np
 
+from rc_web.vision import VisionService
+
 
 class VisionTest(unittest.TestCase):
     def setUp(self):
@@ -79,3 +81,17 @@ class VisionTest(unittest.TestCase):
             pass
         worker.request_stop.assert_called_once()
         worker.set_tracking_enabled.assert_called_with(False)
+
+    def test_integrated_uart_status_uses_physical_sender_state(self):
+        sender = Mock(port='/dev/serial/by-id/stm32', baud_rate=115200)
+        sender.is_open = False
+        service = VisionService(Mock(sender=sender))
+        self.assertEqual(
+            service.status()['uart'],
+            '재연결 대기 — /dev/serial/by-id/stm32',
+        )
+        sender.is_open = True
+        self.assertEqual(
+            service.status()['uart'],
+            '연결됨 — /dev/serial/by-id/stm32 115200bps',
+        )
