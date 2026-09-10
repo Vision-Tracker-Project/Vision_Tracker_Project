@@ -50,14 +50,21 @@ class ControlService:
         self.retry_uart = self.retry_input = 0
         self.thread = None
         self.last_tick = None
+        self.last_log_state = None
         self.mailbox = ServoMailbox(self)
 
     def transmit(self, pair):
         packet = build_vehicle_packet(*pair)
-        LOG.info("axes=(%s,%s) wheels=%s packet=%s reason=%s",
-                 self.controller.x, self.controller.y, pair, packet.hex_string,
-                 ("direction neutral" if self.controller.armed and not any(pair)
-                  else self.controller.reason) if pair == (0, 0) else "drive")
+        reason = (("direction neutral" if self.controller.armed and not any(pair)
+                   else self.controller.reason) if pair == (0, 0) else "drive")
+        log_state = (self.controller.x, self.controller.y, pair, reason)
+        if log_state != self.last_log_state:
+            LOG.info("axes=(%s,%s) wheels=%s packet=%s reason=%s",
+                     self.controller.x, self.controller.y, pair,
+                     packet.hex_string, reason)
+            self.last_log_state = log_state
+        else:
+            LOG.debug("vehicle heartbeat packet=%s", packet.hex_string)
         if self.sender:
             self.sender.send((packet,))
 

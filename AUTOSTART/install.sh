@@ -1,12 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "$EUID" -eq 0 ]]; then
+    echo "이 스크립트는 로그인 사용자로 실행하세요. 필요한 단계에서 sudo를 요청합니다." >&2
+    exit 1
+fi
 AUTOSTART_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${AUTOSTART_DIR}/.." && pwd)"
 SERVICE_USER="$(id -un)"
 SERVICE_GROUP="$(id -gn)"
 USER_SYSTEMD_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 USER_AUTOSTART_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/autostart"
-"${PROJECT_ROOT}/AI/.venv/bin/python" -c "import cv2, serial, fastapi, uvicorn"
+GAMEPAD_DEVICE="${VISION_GAMEPAD_DEVICE:-/dev/input/event6}"
+UART_DEVICE="${VISION_UART_DEVICE:-/dev/ttyACM2}"
+GAMEPAD_CONFIG="${VISION_GAMEPAD_CONFIG:-${PROJECT_ROOT}/AI/gamepad.local.json}"
+
+for value in "$PROJECT_ROOT" "$GAMEPAD_DEVICE" "$UART_DEVICE" "$GAMEPAD_CONFIG"; do
+    if [[ "$value" == *'|'* || "$value" == *'%'* || "$value" =~ [[:space:]] ]]; then
+        echo "설정 경로에 지원하지 않는 문자가 있습니다: $value" >&2
+        exit 1
+    fi
+done
+for required_group in input dialout; do
+    if ! getent group "$required_group" >/dev/null; then
+        echo "필수 시스템 그룹이 없습니다: $required_group" >&2
+        exit 1
+    fi
+done
+if [[ ! -r "$GAMEPAD_CONFIG" ]]; then
+    echo "게임패드 설정을 읽을 수 없습니다: $GAMEPAD_CONFIG" >&2
+    echo "AI/gamepad.example.json을 AI/gamepad.local.json으로 복사하고 측정한 버튼 코드를 입력하세요." >&2
+    exit 1
+fi
+"${PROJECT_ROOT}/AI/.venv/bin/python" -c "import cv2, serial, evdev, fastapi, uvicorn"
+"${PROJECT_ROOT}/AI/.venv/bin/python" - "$GAMEPAD_CONFIG" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    mapping = json.load(stream).get("buttons", {})
+if (set(mapping) != {"enable", "stop", "slower", "faster"}
+        or any(type(value) is not int or value < 0 for value in mapping.values())
+        or len(set(mapping.values())) != 4):
+    raise SystemExit("buttons에는 측정한 서로 다른 정수 코드 4개가 필요합니다.")
+PY
+
+if [[ "$GAMEPAD_DEVICE" == /dev/input/event* ]]; then
+    echo "주의: $GAMEPAD_DEVICE 번호는 재부팅 후 바뀔 수 있습니다. /dev/input/by-id 경로를 권장합니다." >&2
+fi
+if [[ "$UART_DEVICE" == /dev/ttyACM* || "$UART_DEVICE" == /dev/ttyUSB* ]]; then
+    echo "주의: $UART_DEVICE 번호는 재부팅 후 바뀔 수 있습니다. /dev/serial/by-id 경로를 권장합니다." >&2
+fi
 # Authenticate before changing the running services.
 sudo -v
 systemctl --user stop vision-tracker-preview.service 2>/dev/null || true
@@ -23,9 +66,16 @@ rendered_web_unit="$(mktemp)"
 trap 'rm -f "$rendered_web_unit"' EXIT
 sed -e "s|@PROJECT_ROOT@|${PROJECT_ROOT}|g" -e "s|@SERVICE_USER@|${SERVICE_USER}|g" \
     -e "s|@SERVICE_GROUP@|${SERVICE_GROUP}|g" \
+    -e "s|@GAMEPAD_DEVICE@|${GAMEPAD_DEVICE}|g" \
+    -e "s|@GAMEPAD_CONFIG@|${GAMEPAD_CONFIG}|g" \
+    -e "s|@UART_DEVICE@|${UART_DEVICE}|g" \
     "${AUTOSTART_DIR}/systemd/vision-tracker-web.service.in" > "$rendered_web_unit"
 sudo install -m 0644 "$rendered_web_unit" /etc/systemd/system/vision-tracker-web.service
 sudo systemctl daemon-reload
 sudo systemctl enable vision-tracker-web.service
 sudo systemctl restart vision-tracker-web.service
-printf '%s\n' '통합 웹 서버 활성화: vision-tracker-web.service (8000)'
+printf '%s\n' \
+    '통합 자동 실행 활성화: vision-tracker-web.service (웹 8000)' \
+    "게임패드: ${GAMEPAD_DEVICE}" \
+    "STM32 UART: ${UART_DEVICE}" \
+    "버튼 설정: ${GAMEPAD_CONFIG}"

@@ -40,8 +40,9 @@ python3 main.py \
 제어는 계속 동작한다. `/dev/input/eventN`, `/dev/ttyACMN`보다
 `/dev/input/by-id/`, `/dev/serial/by-id/`의 고정 경로 사용을 권장한다.
 
-웹·카메라만 개발할 때는 기존 `WEB/run.sh`를 사용할 수 있지만, 이 경로에는
-게임패드 CLI 옵션이 연결되지 않는다.
+부팅 자동 실행은 `bash AUTOSTART/install.sh`로 설치한다. 설치된 systemd
+서비스는 웹·카메라·팬틸트·게임패드 차량 제어를 모두 시작한다. `WEB/run.sh`는
+웹·카메라만 확인하는 개발용 실행 경로이며 게임패드 차량 제어는 시작하지 않는다.
 
 ```bash
 cd /home/aidl/work/Vision_Tracker_Project
