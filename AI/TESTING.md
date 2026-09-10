@@ -10,6 +10,23 @@
 GCC가 없으면 해당 C 테스트만 skip된다. 세부 범위는 [GAMEPAD.md](GAMEPAD.md)와
 [UART_PROTOCOL.md](UART_PROTOCOL.md)를 참고한다.
 
+## PA0/PA1 서보 PWM 단독 진단
+
+통합 실행과 UART를 제외하고 TIM2 PWM만 검사하는 별도 펌웨어를 제공한다. 두
+서보가 90도에서 시작해 70도와 110도 사이를 1.5초마다 반복 이동한다. 차량 PWM은
+진단 중 비활성 상태로 유지된다.
+
+```bash
+cd ~/work/Vision_Tracker_Project/STM32
+make servo-test-run
+```
+
+진단 후에는 통합 펌웨어를 다시 플래시한다.
+
+```bash
+make run
+```
+
 ## 가장 자주 사용하는 명령
 
 `AI/` 디렉터리에서 아래 명령 하나로 모든 테스트 실행 가능.

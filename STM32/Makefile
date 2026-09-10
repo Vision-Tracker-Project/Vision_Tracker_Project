@@ -12,6 +12,10 @@ LDS_FILE_NAME := rom_0x08000000.lds
 OUT_BIN_FILE  := $(OUT_FILE_NAME).bin
 OUT_ELF_FILE  := $(OUT_FILE_NAME).elf
 OUT_MAP_FILE  := $(OUT_FILE_NAME).map
+SERVO_TEST_FILE_NAME := servo_test_0x08000000
+SERVO_TEST_BIN_FILE  := $(SERVO_TEST_FILE_NAME).bin
+SERVO_TEST_ELF_FILE  := $(SERVO_TEST_FILE_NAME).elf
+SERVO_TEST_MAP_FILE  := $(SERVO_TEST_FILE_NAME).map
 
 ARCH_FLAGS := -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
 CPPFLAGS   := -DSTM32F411xE -I.
@@ -23,12 +27,13 @@ LDFLAGS    := $(ARCH_FLAGS) --specs=nano.specs --specs=nosys.specs \
               -Wl,-Map=$(OUT_MAP_FILE) -Wl,--cref -Wl,-EL -T $(LDS_FILE_NAME)
 LDLIBS     := -lc -lgcc
 
-CSRC := $(wildcard *.c)
+CSRC := $(filter-out servo_test_main.c,$(wildcard *.c))
 ASRC := $(wildcard *.s)
 OBJS := $(CSRC:.c=.o) $(ASRC:.s=.o)
-DEPS := $(OBJS:.o=.d)
+SERVO_TEST_OBJS := $(filter-out main.o,$(OBJS)) servo_test_main.o
+DEPS := $(OBJS:.o=.d) servo_test_main.d
 
-.PHONY: all clean run
+.PHONY: all clean run servo-test servo-test-run
 
 all: $(OUT_BIN_FILE)
 
@@ -40,6 +45,15 @@ $(OUT_BIN_FILE): $(OUT_ELF_FILE)
 $(OUT_ELF_FILE): $(OBJS) $(LDS_FILE_NAME)
 	$(CC) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
+servo-test: $(SERVO_TEST_BIN_FILE)
+
+$(SERVO_TEST_BIN_FILE): $(SERVO_TEST_ELF_FILE)
+	$(OBJCOPY) $< $@ -O binary
+
+$(SERVO_TEST_ELF_FILE): $(SERVO_TEST_OBJS) $(LDS_FILE_NAME)
+	$(CC) $(SERVO_TEST_OBJS) \
+		$(subst $(OUT_MAP_FILE),$(SERVO_TEST_MAP_FILE),$(LDFLAGS)) $(LDLIBS) -o $@
+
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
@@ -50,7 +64,11 @@ $(OUT_ELF_FILE): $(OBJS) $(LDS_FILE_NAME)
 
 clean:
 	rm -f $(OUT_BIN_FILE) $(OUT_ELF_FILE) $(OUT_MAP_FILE)
-	rm -f $(OBJS) $(DEPS) __dump.txt __dump_all.txt
+	rm -f $(SERVO_TEST_BIN_FILE) $(SERVO_TEST_ELF_FILE) $(SERVO_TEST_MAP_FILE)
+	rm -f $(OBJS) servo_test_main.o $(DEPS) __dump.txt __dump_all.txt
 
 run: $(OUT_ELF_FILE)
 	$(PROGRAMMER) -c port=SWD -w ./$(OUT_ELF_FILE) -v -rst -q
+
+servo-test-run: $(SERVO_TEST_ELF_FILE)
+	$(PROGRAMMER) -c port=SWD -w ./$(SERVO_TEST_ELF_FILE) -v -rst -q
