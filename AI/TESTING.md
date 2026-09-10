@@ -21,6 +21,10 @@ cd ~/work/Vision_Tracker_Project/STM32
 make servo-test-run
 ```
 
+`make *-run`은 설치된 도구를 자동 선택한다. STM32CubeProgrammer의
+`STM32_Programmer_CLI`가 없으면 Ubuntu의 `stlink-tools`에 포함된 `st-flash`를
+사용한다.
+
 진단 후에는 통합 펌웨어를 다시 플래시한다.
 
 ```bash

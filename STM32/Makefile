@@ -6,6 +6,8 @@ CC      := $(CROSS_COMPILE)gcc
 OBJCOPY := $(CROSS_COMPILE)objcopy
 OBJDUMP := $(CROSS_COMPILE)objdump
 PROGRAMMER ?= STM32_Programmer_CLI
+ST_FLASH   ?= st-flash
+FLASH_ADDRESS ?= 0x08000000
 
 OUT_FILE_NAME := rom_0x08000000
 LDS_FILE_NAME := rom_0x08000000.lds
@@ -67,8 +69,22 @@ clean:
 	rm -f $(SERVO_TEST_BIN_FILE) $(SERVO_TEST_ELF_FILE) $(SERVO_TEST_MAP_FILE)
 	rm -f $(OBJS) servo_test_main.o $(DEPS) __dump.txt __dump_all.txt
 
-run: $(OUT_ELF_FILE)
-	$(PROGRAMMER) -c port=SWD -w ./$(OUT_ELF_FILE) -v -rst -q
+run: $(OUT_BIN_FILE)
+	@if command -v "$(PROGRAMMER)" >/dev/null 2>&1; then \
+		"$(PROGRAMMER)" -c port=SWD -w ./$(OUT_ELF_FILE) -v -rst -q; \
+	elif command -v "$(ST_FLASH)" >/dev/null 2>&1; then \
+		"$(ST_FLASH)" --reset write ./$(OUT_BIN_FILE) $(FLASH_ADDRESS); \
+	else \
+		echo "No STM32 programmer found. Install STM32CubeProgrammer or stlink-tools." >&2; \
+		exit 127; \
+	fi
 
-servo-test-run: $(SERVO_TEST_ELF_FILE)
-	$(PROGRAMMER) -c port=SWD -w ./$(SERVO_TEST_ELF_FILE) -v -rst -q
+servo-test-run: $(SERVO_TEST_BIN_FILE)
+	@if command -v "$(PROGRAMMER)" >/dev/null 2>&1; then \
+		"$(PROGRAMMER)" -c port=SWD -w ./$(SERVO_TEST_ELF_FILE) -v -rst -q; \
+	elif command -v "$(ST_FLASH)" >/dev/null 2>&1; then \
+		"$(ST_FLASH)" --reset write ./$(SERVO_TEST_BIN_FILE) $(FLASH_ADDRESS); \
+	else \
+		echo "No STM32 programmer found. Install STM32CubeProgrammer or stlink-tools." >&2; \
+		exit 127; \
+	fi
