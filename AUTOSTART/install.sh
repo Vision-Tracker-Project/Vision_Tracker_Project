@@ -37,7 +37,10 @@ if [[ -z "$PYTHON_BIN" ]]; then
     echo "AI/.venv, AI/venv 또는 VISION_PYTHON=/절대경로/bin/python 중 하나가 필요합니다." >&2
     exit 1
 fi
-PYTHON_BIN="$(readlink -f "$PYTHON_BIN")"
+if [[ "$PYTHON_BIN" != /* ]]; then
+    echo "Python 경로는 절대 경로여야 합니다: $PYTHON_BIN" >&2
+    exit 1
+fi
 
 for value in "$PROJECT_ROOT" "$PYTHON_BIN" "$GAMEPAD_DEVICE" "$UART_DEVICE" "$GAMEPAD_CONFIG"; do
     if [[ "$value" == *'|'* || "$value" == *'%'* || "$value" =~ [[:space:]] ]]; then
