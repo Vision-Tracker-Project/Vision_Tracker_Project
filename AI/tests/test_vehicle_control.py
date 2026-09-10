@@ -183,6 +183,7 @@ class InputTest(unittest.TestCase):
     def test_cli_default_and_explicit_uart_selection(self):
         from src.control.__main__ import create_service
         self.assertIsNone(create_service([]).sender)
+        self.assertIsNone(create_service(["--gamepad", "--device", "auto"]).source.path)
         with patch("src.communication.uart_sender.serial") as serial:
             self.assertIsNotNone(create_service(["--uart","fake"]).sender)
             serial.Serial.assert_not_called()

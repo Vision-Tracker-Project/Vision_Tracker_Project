@@ -48,6 +48,8 @@ class ControlService:
         self.stopping = threading.Event()
         self.servo = ()
         self.retry_uart = self.retry_input = 0
+        self.last_input_error = None
+        self.last_input_error_log = 0
         self.thread = None
         self.last_tick = None
         self.last_log_state = None
@@ -95,10 +97,16 @@ class ControlService:
                     try:
                         if not self.controller.connected and start >= self.retry_input:
                             self.source.connect(self.controller)
+                            self.last_input_error = None
                         if self.controller.connected:
                             self.source.poll(self.controller, 0)
                     except OSError as error:
-                        LOG.warning("input: %s", error)
+                        message = str(error)
+                        if (message != self.last_input_error
+                                or start - self.last_input_error_log >= 30):
+                            LOG.warning("input: %s", error)
+                            self.last_input_error = message
+                            self.last_input_error_log = start
                         self.controller.disconnect()
                         self.source.close()
                         self.retry_input = start + 1

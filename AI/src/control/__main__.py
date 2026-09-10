@@ -15,7 +15,10 @@ def create_service(argv=None):
     parser.add_argument("--gamepad", action="store_true")
     parser.add_argument("--diagnose", action="store_true")
     parser.add_argument("--config", help="JSON settings and measured button codes")
-    parser.add_argument("--device", help="Explicit disambiguation path, never a default event number")
+    parser.add_argument(
+        "--device",
+        help="Explicit gamepad path; 'auto' or omission discovers by identity",
+    )
     args = parser.parse_args(argv)
     config = {}
     if args.config:
@@ -32,7 +35,8 @@ def create_service(argv=None):
         parser.error("real driving requires measured --config button mapping")
     source = None
     if args.gamepad or args.diagnose:
-        source = EvdevSource(mapping, path=args.device, diagnostic=args.diagnose,
+        device_path = None if args.device in (None, "auto") else args.device
+        source = EvdevSource(mapping, path=device_path, diagnostic=args.diagnose,
                              **config.get("device", {}))
     return ControlService(source, Controller(Settings(**config.get("settings", {}))), args.uart)
 

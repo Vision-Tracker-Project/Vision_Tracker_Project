@@ -38,10 +38,11 @@ ls -l /dev/input/by-id/
 ls -l /dev/serial/by-id/
 ```
 
-현재 확인한 임시 경로(`/dev/input/event6`, `/dev/ttyACM2`)로 설치:
+게임패드는 기본값 `auto`로 이름과 HAT 축을 기준으로 매번 탐색한다. 따라서
+`event6`처럼 재부팅 후 달라지는 번호를 설치 파일에 저장하지 않는다. 현재 확인한
+STM32 임시 경로로 설치:
 
 ```bash
-VISION_GAMEPAD_DEVICE=/dev/input/event6 \
 VISION_UART_DEVICE=/dev/ttyACM2 \
 bash AUTOSTART/install.sh
 ```
@@ -51,7 +52,6 @@ bash AUTOSTART/install.sh
 
 ```bash
 VISION_PYTHON=/home/aidl/venv/bin/python \
-VISION_GAMEPAD_DEVICE=/dev/input/event6 \
 VISION_UART_DEVICE=/dev/ttyACM2 \
 bash AUTOSTART/install.sh
 ```
