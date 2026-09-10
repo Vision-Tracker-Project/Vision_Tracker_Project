@@ -9,6 +9,11 @@
 - 단일 프로세스와 단일 UART 소유자 사용
 - 카메라를 꺼도 차량 제어 유지
 
+설치 스크립트는 `AI/.venv`, `AI/venv`, 현재 활성화된 `VIRTUAL_ENV` 순서로
+Python 가상환경을 찾는다. 다른 위치라면 설치할 때
+`VISION_PYTHON=/절대경로/bin/python`을 지정한다. 탐지된 절대 경로가 systemd
+서비스에 저장되므로 부팅 후 가상환경을 수동 활성화할 필요가 없다.
+
 Jetson에 외부 전원이 들어오면 USB를 통해 M4 보드가 켜지고 장치가 열거된다.
 systemd가 먼저 시작되더라도 제어 서비스가 게임패드와 UART 연결을 1초마다
 재시도하므로 고정 지연 명령은 필요 없다. 종료 시에는 정지 패킷 전송을 시도하고,
@@ -36,6 +41,16 @@ ls -l /dev/serial/by-id/
 현재 확인한 임시 경로(`/dev/input/event6`, `/dev/ttyACM2`)로 설치:
 
 ```bash
+VISION_GAMEPAD_DEVICE=/dev/input/event6 \
+VISION_UART_DEVICE=/dev/ttyACM2 \
+bash AUTOSTART/install.sh
+```
+
+가상환경이 `AI/venv`에 있으면 자동으로 인식한다. 프로젝트 밖에 있다면 다음처럼
+한 번만 실제 경로를 지정한다.
+
+```bash
+VISION_PYTHON=/home/aidl/venv/bin/python \
 VISION_GAMEPAD_DEVICE=/dev/input/event6 \
 VISION_UART_DEVICE=/dev/ttyACM2 \
 bash AUTOSTART/install.sh

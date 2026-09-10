@@ -13,8 +13,33 @@ USER_AUTOSTART_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/autostart"
 GAMEPAD_DEVICE="${VISION_GAMEPAD_DEVICE:-/dev/input/event6}"
 UART_DEVICE="${VISION_UART_DEVICE:-/dev/ttyACM2}"
 GAMEPAD_CONFIG="${VISION_GAMEPAD_CONFIG:-${PROJECT_ROOT}/AI/gamepad.local.json}"
+PYTHON_BIN="${VISION_PYTHON:-}"
 
-for value in "$PROJECT_ROOT" "$GAMEPAD_DEVICE" "$UART_DEVICE" "$GAMEPAD_CONFIG"; do
+if [[ -n "$PYTHON_BIN" && ! -x "$PYTHON_BIN" ]]; then
+    echo "VISION_PYTHON 실행 파일을 찾을 수 없습니다: $PYTHON_BIN" >&2
+    exit 1
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+    for candidate in \
+        "${PROJECT_ROOT}/AI/.venv/bin/python" \
+        "${PROJECT_ROOT}/AI/venv/bin/python"; do
+        if [[ -x "$candidate" ]]; then
+            PYTHON_BIN="$candidate"
+            break
+        fi
+    done
+fi
+if [[ -z "$PYTHON_BIN" && -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    PYTHON_BIN="${VIRTUAL_ENV}/bin/python"
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+    echo "Python 가상환경을 찾지 못했습니다." >&2
+    echo "AI/.venv, AI/venv 또는 VISION_PYTHON=/절대경로/bin/python 중 하나가 필요합니다." >&2
+    exit 1
+fi
+PYTHON_BIN="$(readlink -f "$PYTHON_BIN")"
+
+for value in "$PROJECT_ROOT" "$PYTHON_BIN" "$GAMEPAD_DEVICE" "$UART_DEVICE" "$GAMEPAD_CONFIG"; do
     if [[ "$value" == *'|'* || "$value" == *'%'* || "$value" =~ [[:space:]] ]]; then
         echo "설정 경로에 지원하지 않는 문자가 있습니다: $value" >&2
         exit 1
@@ -31,8 +56,8 @@ if [[ ! -r "$GAMEPAD_CONFIG" ]]; then
     echo "AI/gamepad.example.json을 AI/gamepad.local.json으로 복사하고 측정한 버튼 코드를 입력하세요." >&2
     exit 1
 fi
-"${PROJECT_ROOT}/AI/.venv/bin/python" -c "import cv2, serial, evdev, fastapi, uvicorn"
-"${PROJECT_ROOT}/AI/.venv/bin/python" - "$GAMEPAD_CONFIG" <<'PY'
+"$PYTHON_BIN" -c "import cv2, serial, evdev, fastapi, uvicorn"
+"$PYTHON_BIN" - "$GAMEPAD_CONFIG" <<'PY'
 import json
 import sys
 
@@ -66,6 +91,7 @@ rendered_web_unit="$(mktemp)"
 trap 'rm -f "$rendered_web_unit"' EXIT
 sed -e "s|@PROJECT_ROOT@|${PROJECT_ROOT}|g" -e "s|@SERVICE_USER@|${SERVICE_USER}|g" \
     -e "s|@SERVICE_GROUP@|${SERVICE_GROUP}|g" \
+    -e "s|@PYTHON_BIN@|${PYTHON_BIN}|g" \
     -e "s|@GAMEPAD_DEVICE@|${GAMEPAD_DEVICE}|g" \
     -e "s|@GAMEPAD_CONFIG@|${GAMEPAD_CONFIG}|g" \
     -e "s|@UART_DEVICE@|${UART_DEVICE}|g" \
@@ -76,6 +102,7 @@ sudo systemctl enable vision-tracker-web.service
 sudo systemctl restart vision-tracker-web.service
 printf '%s\n' \
     '통합 자동 실행 활성화: vision-tracker-web.service (웹 8000)' \
+    "Python: ${PYTHON_BIN}" \
     "게임패드: ${GAMEPAD_DEVICE}" \
     "STM32 UART: ${UART_DEVICE}" \
     "버튼 설정: ${GAMEPAD_CONFIG}"
