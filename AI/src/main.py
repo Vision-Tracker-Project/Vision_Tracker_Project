@@ -1,7 +1,9 @@
 """통합 웹 애플리케이션 진입점."""
 
+import logging
 import os
 import sys
+from pathlib import Path
 
 
 def camera_autostart_enabled(environment=None) -> bool:
@@ -15,11 +17,18 @@ def camera_autostart_enabled(environment=None) -> bool:
 
 
 def main() -> int:
-    from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "WEB"))
+
     import uvicorn
+
+    from rc_web.app import create_app
+    from src.control.__main__ import create_service
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    control_service = create_service()
+    application = create_app(control_service=control_service)
     uvicorn.run(
-        "rc_web.app:app",
+        application,
         host="0.0.0.0",
         port=8000,
         workers=1,

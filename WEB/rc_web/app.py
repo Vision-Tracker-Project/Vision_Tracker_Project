@@ -18,21 +18,29 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 logger = logging.getLogger("uvicorn.error")
 
 
-def create_app(history_capacity: int = 100) -> FastAPI:
+def create_app(history_capacity: int = 100, control_service=None) -> FastAPI:
     # JPEG 폴링은 초당 수십 건의 요청을 만들기 때문에 접근 로그를 끈다.
     # 오류 및 애플리케이션 로그는 uvicorn.error에 계속 기록된다.
     logging.getLogger("uvicorn.access").disabled = True
-    vision = VisionService()
+    vision = VisionService(control_service)
 
     @asynccontextmanager
     async def lifespan(app):
-        if os.environ.get("VISION_AUTOSTART_CAMERA", "").lower() in {"1", "true", "yes", "on"}:
+        if control_service is not None:
+            control_service.start()
+        try:
+            if os.environ.get("VISION_AUTOSTART_CAMERA", "").lower() in {"1", "true", "yes", "on"}:
+                try:
+                    vision.start()
+                except Exception as error:
+                    vision.update(error=str(error))
+            yield
+        finally:
             try:
-                vision.start()
-            except Exception as error:
-                vision.update(error=str(error))
-        yield
-        vision.stop()
+                vision.stop()
+            finally:
+                if control_service is not None:
+                    control_service.stop()
 
     application = FastAPI(
         title="Jetson Vision Tracker",
@@ -43,6 +51,7 @@ def create_app(history_capacity: int = 100) -> FastAPI:
         lifespan=lifespan,
     )
     application.state.vision = vision
+    application.state.control_service = control_service
     application.include_router(router_for(vision))
     store = CommandStore(history_capacity)
     application.state.command_store = store

@@ -2,6 +2,14 @@
 
 # unittest 테스트 가이드
 
+게임패드·차량·서보 공통 프로토콜의 하드웨어 없는 테스트:
+`python -m unittest tests.test_vehicle_control tests.test_gamepad_device tests.test_uart_protocol -v`.
+`test_vehicle_control`은 호스트 GCC로 실제 STM32 공통 스트리밍 파서와 차량 C
+코드를 임시 공유 라이브러리로 컴파일한다. 서보 패킷이 차량 watchdog을
+갱신하지 않는 것과 카메라 종료가 차량 상태를 정지시키지 않는 것도 검증한다.
+GCC가 없으면 해당 C 테스트만 skip된다. 세부 범위는 [GAMEPAD.md](GAMEPAD.md)와
+[UART_PROTOCOL.md](UART_PROTOCOL.md)를 참고한다.
+
 ## 가장 자주 사용하는 명령
 
 `AI/` 디렉터리에서 아래 명령 하나로 모든 테스트 실행 가능.

@@ -1,38 +1,46 @@
-> 웹 이식 이후 실행·화면·FPS 측정은 [WEB/README.md](../WEB/README.md)를 따릅니다. 아래 문서의 Qt/GUI 관련 설명은 이전 구현 기록입니다.
+# 통합 AI·게임패드 제어 구조
 
-# AI 모듈 구조
-
-```text
-AI/
-├── main.py                   # 프로그램 실행 진입점
-├── src/
-│   ├── config.py             # 카메라, 모델, 추적, UART 설정
-│   ├── main.py               # PyQt 애플리케이션 생성
-│   ├── camera/               # USB 카메라 연결·조회·해제
-│   ├── detection/            # YuNet 얼굴 검출
-│   ├── recognition/          # SFace 특징 벡터 추출
-│   ├── tracking/             # 추적 얼굴 선택과 팬·틸트 각도 계산
-│   ├── communication/        # 6바이트 패킷 생성과 UART 전송
-│   ├── buffer/               # 최근 60초 JPEG 프레임 보관
-│   ├── capture/              # 실시간·다시보기 프레임 PNG 저장
-│   ├── workers/              # 카메라·AI·통신 백그라운드 처리
-│   └── ui/                   # 영상과 처리 상태 표시
-├── models/                   # YuNet·SFace ONNX 모델
-└── tests/                    # 모듈별 unittest
-```
-
-## 데이터 흐름
+웹 기반 YOLO 사람 추적과 게임패드 차량 제어는 처리 주기와 수명 주기를
+분리한다. UART 쓰기만 `ControlService` 한 곳으로 모아 패킷 바이트가 서로
+섞이지 않게 한다.
 
 ```text
-USB 카메라
-→ YuNet 얼굴 검출
-→ SFace 특징 벡터 추출
-→ 사용자 추적 시작
-→ 추적 얼굴 선택
-→ 중심 좌표 필터링
-→ 팬·틸트 각도 계산
-→ 패킷 생성
-→ STM32 UART 전송
+USB 게임패드                       USB 카메라
+     │ evdev                        │ 최신 프레임
+     ▼                              ▼
+Controller 상태기계              YOLO + ReID + PersonTracker
+     │ 50 ms 차량 명령              │ 변경된 PAN/TILT 패킷
+     │                              ▼
+     │                         ServoMailbox
+     └───────────────────────────┘
+                    │
+                    ▼
+           ControlService (UART 단일 소유)
+                    │
+                    ▼
+                  STM32
+             ┌─────────┴─────────┐
+             ▼                   ▼
+       TIM2 PAN/TILT          TIM3 + GPIO 차량 모터
 ```
 
-현재 얼굴 등록과 유사도 비교는 미구현. 추적 대상은 가장 큰 얼굴로 선택.
+웹 서버가 시작될 때 제어 서비스가 먼저 시작되고 서버 종료 때 마지막으로
+정지한다. 카메라 작업자의 시작/정지는 `ServoMailbox`에만 영향을 주므로 차량은
+계속 제어할 수 있다. UART 재연결, 게임패드 재연결, 입력 손실 또는 제어 루프
+지연 후에는 방향 중립과 A 버튼의 새 누름이 필요하다.
+
+주요 파일:
+
+| 파일 | 역할 |
+|---|---|
+| `src/main.py` | CLI 설정을 읽고 통합 FastAPI 앱 실행 |
+| `src/control/service.py` | 게임패드 주기 처리, UART 소유, 서보 메일박스 |
+| `src/control/state.py` | 차량 방향·속도·안전 상태기계 |
+| `src/workers/video_worker.py` | 최신 카메라 프레임의 사람 검출과 팬·틸트 계산 |
+| `../WEB/rc_web/vision.py` | 웹 카메라 서비스와 메일박스 연결 |
+| `../STM32/vehicle.c` | 공통 스트리밍 패킷 파서와 차량 상태 |
+| `../STM32/vehicle_hw.c` | UART ring buffer, watchdog, TIM3 차량 출력 |
+| `../STM32/servo.c` | TIM2 팬·틸트 PWM과 공통 파서 콜백 |
+
+프로토콜은 [UART_PROTOCOL.md](UART_PROTOCOL.md), 게임패드 안전 정책과 핀맵은
+[GAMEPAD.md](GAMEPAD.md)를 참고한다.

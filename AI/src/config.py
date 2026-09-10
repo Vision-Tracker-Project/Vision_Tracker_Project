@@ -46,7 +46,8 @@ TRACKING_HEAD_RELEASE_TOP = 0.28
 TRACKING_HEAD_RELEASE_BOTTOM = 0.36
 SERVO_SEND_INTERVAL_SECONDS = 0.1
 
-# Jetson -> STM32 UART. 실제 장치명이 다르면 VISION_UART_PORT로 변경 가능.
+# 영상 전용 `uvicorn rc_web.app:app` 실행의 호환 기본값.
+# 게임패드 통합 실행에서는 이 값이 아니라 `main.py --uart PATH`를 사용한다.
 UART_PORT = os.environ.get("VISION_UART_PORT", "/dev/ttyACM0")
 UART_BAUD_RATE = 115200
 UART_WRITE_TIMEOUT_SECONDS = 1

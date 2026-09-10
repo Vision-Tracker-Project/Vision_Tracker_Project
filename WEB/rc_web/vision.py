@@ -11,8 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'AI'))
 
 
 class VisionService:
-    def __init__(self):
+    def __init__(self, control_service=None):
         self.control = threading.RLock()
+        self.control_service = control_service
         self.condition = threading.Condition()
         self.worker = None
         self.latest = None
@@ -63,8 +64,10 @@ class VisionService:
                 pan_inverted=c.PAN_INVERTED, tilt_inverted=c.TILT_INVERTED,
                 reid_threshold=c.PERSON_REID_THRESHOLD, reid_margin=c.PERSON_REID_MARGIN,
                 lost_timeout=c.PERSON_LOST_TIMEOUT_SECONDS)
+            uart_sender = (self.control_service.mailbox if self.control_service is not None else
+                           UartSender(c.UART_PORT, c.UART_BAUD_RATE, c.UART_WRITE_TIMEOUT_SECONDS))
             worker = VideoWorker(CameraCapture(c.CAMERA_INDEX, c.DEFAULT_FRAME_WIDTH, c.DEFAULT_FRAME_HEIGHT),
-                detector, tracker, UartSender(c.UART_PORT, c.UART_BAUD_RATE, c.UART_WRITE_TIMEOUT_SECONDS),
+                detector, tracker, uart_sender,
                 send_interval=c.SERVO_SEND_INTERVAL_SECONDS, uart_retry_interval=c.UART_RETRY_INTERVAL_SECONDS)
             worker.raw_mode = mode != 'ai'
             # Baseline modes never open UART; AI keeps the existing tracking path.

@@ -115,3 +115,16 @@ void TIM2_Servo_Init(void)
     // Timer Start
     TIM2->CR1 |= (1 << 0);
 }
+
+/* Called by the shared UART parser from main context, never from the ISR. */
+void Vehicle_Servo_Command(unsigned int target, unsigned int angle)
+{
+    if (target == 0x01u)
+    {
+        TIM2_Servo_Set_Pan_Angle(angle);
+    }
+    else if (target == 0x02u)
+    {
+        TIM2_Servo_Set_Tilt_Angle(angle);
+    }
+}

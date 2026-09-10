@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -121,6 +122,14 @@ class CommandApiTest(unittest.TestCase):
 
     def test_command_requires_post(self):
         self.assertEqual(self.client.get("/api/command").status_code, 405)
+
+    def test_shared_control_service_follows_server_lifespan(self):
+        control = Mock()
+        control.mailbox = Mock()
+        with TestClient(create_app(control_service=control)) as client:
+            self.assertEqual(client.get("/health").status_code, 200)
+        control.start.assert_called_once_with()
+        control.stop.assert_called_once_with()
 
 
 if __name__ == "__main__":

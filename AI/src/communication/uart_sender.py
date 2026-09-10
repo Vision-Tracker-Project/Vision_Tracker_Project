@@ -23,12 +23,14 @@ class UartSender:
         baud_rate: int = 115200,
         write_timeout: float = 0.2,
         serial_factory: Optional[Callable] = None,
+        flush_after_write: bool = True,
     ) -> None:
         self.port = port
         self.baud_rate = baud_rate
         self.write_timeout = write_timeout
         self._serial_factory = serial_factory
         self._connection = None
+        self.flush_after_write = flush_after_write
 
     @property
     def is_open(self) -> bool:
@@ -69,7 +71,8 @@ class UartSender:
             return 0
         try:
             written = self._connection.write(payload)
-            self._connection.flush()
+            if self.flush_after_write:
+                self._connection.flush()
         except Exception as error:
             self.close()
             raise UartError(f"UART 전송 실패 ({self.port}): {error}") from error
