@@ -1,64 +1,56 @@
-# Tool information
-TOOL_DIR		= C:\arm-gnu-toolchain-15.2.rel1-mingw-w64-i686-arm-none-eabi
-VERSION			= 15.2.1
-TARGET			= arm-none-eabi
+# Cross toolchain. Linux uses tools from PATH. Override CROSS_COMPILE when the
+# toolchain is elsewhere, for example:
+# make CROSS_COMPILE='C:/arm-gnu-toolchain/bin/arm-none-eabi-'
+CROSS_COMPILE ?= arm-none-eabi-
+CC      := $(CROSS_COMPILE)gcc
+OBJCOPY := $(CROSS_COMPILE)objcopy
+OBJDUMP := $(CROSS_COMPILE)objdump
+PROGRAMMER ?= STM32_Programmer_CLI
 
-# Project name & Link script
-OUT_FILE_NAME 	= rom_0x08000000
-LDS_FILE_NAME	= rom_0x08000000.lds
+OUT_FILE_NAME := rom_0x08000000
+LDS_FILE_NAME := rom_0x08000000.lds
+OUT_BIN_FILE  := $(OUT_FILE_NAME).bin
+OUT_ELF_FILE  := $(OUT_FILE_NAME).elf
+OUT_MAP_FILE  := $(OUT_FILE_NAME).map
 
-# Compiler & Linker Option, Cortex-M4 & No FPU
-CFLAGS  		= -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -DSTM32F411xE 
-CFLAGS 			+= -std=gnu99 -O3 -Wall -g -c -fno-builtin -funsigned-char -fno-strict-aliasing -fno-common
-LDFLAGS 		= -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
-LDFLAGS    		+= --specs=nano.specs --specs=nosys.specs -u _printf_float -nostartfiles -ffreestanding
-LDFLAGS    		+= -Wl,-Map=$(OUT_FILE_NAME).map -Wl,--cref -Wl,-EL -T $(LDS_FILE_NAME)
+ARCH_FLAGS := -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+CPPFLAGS   := -DSTM32F411xE -I.
+CFLAGS     := $(ARCH_FLAGS) -std=gnu99 -O3 -Wall -g -fno-builtin \
+              -funsigned-char -fno-strict-aliasing -fno-common -MMD -MP
+ASFLAGS    := $(ARCH_FLAGS) -x assembler-with-cpp
+LDFLAGS    := $(ARCH_FLAGS) --specs=nano.specs --specs=nosys.specs \
+              -u _printf_float -nostartfiles -ffreestanding \
+              -Wl,-Map=$(OUT_MAP_FILE) -Wl,--cref -Wl,-EL -T $(LDS_FILE_NAME)
+LDLIBS     := -lc -lgcc
 
-# Output File definition
-OUT_BIN_FILE	= $(OUT_FILE_NAME).bin
-OUT_ELF_FILE	= $(OUT_FILE_NAME).elf
-OUT_MAP_FILE	= $(OUT_FILE_NAME).map
-OUT_DUMP_FILE	= $(OUT_FILE_NAME).dmp
+CSRC := $(wildcard *.c)
+ASRC := $(wildcard *.s)
+OBJS := $(CSRC:.c=.o) $(ASRC:.s=.o)
+DEPS := $(OBJS:.o=.d)
 
-# Tool setting
-AS				= "$(TOOL_DIR)/bin/$(TARGET)-as"
-CC				= "$(TOOL_DIR)/bin/$(TARGET)-gcc"
-LD 				= "$(TOOL_DIR)/bin/$(TARGET)-ld"
-OBJCOPY			= "$(TOOL_DIR)/bin/$(TARGET)-objcopy"
-OBJDUMP			= "$(TOOL_DIR)/bin/$(TARGET)-objdump"
+.PHONY: all clean run
 
-# Source & Header File 
-CSRC 			= $(wildcard *.c)
-ASRC 			= $(wildcard *.s)
-HEADER 			= $(wildcard *.h)
-OBJS    		= $(CSRC:.c=.o) $(ASRC:.s=.o)
-DUMP 			= $(wildcard *.txt)
-
-# Library and include folder
-C_DIR			= $(TOOL_DIR)/$(TARGET)
-GCC_DIR			= $(TOOL_DIR)/lib/gcc/$(TARGET)/$(VERSION)
-LIB_OPTION		= -L "$(C_DIR)/lib/thumb2" -L "$(GCC_DIR)/thumb2" -lc -lgcc
-INCLUDE			= -nostdinc  -I. -I "$(C_DIR)/include" -I "$(GCC_DIR)/include" 
-
-all : $(OUT_BIN_FILE)
+all: $(OUT_BIN_FILE)
 
 $(OUT_BIN_FILE): $(OUT_ELF_FILE)
-	$(OBJCOPY) $(OUT_ELF_FILE) $(OUT_BIN_FILE) -O binary
-	$(OBJDUMP) -x -D .\$(OUT_ELF_FILE) > .\__dump.txt
-	$(OBJDUMP) -x -D -S .\$(OUT_ELF_FILE) > .\__dump_all.txt
+	$(OBJCOPY) $< $@ -O binary
+	$(OBJDUMP) -x -D $< > __dump.txt
+	$(OBJDUMP) -x -D -S $< > __dump_all.txt
 
-$(OUT_FILE_NAME).elf: $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) $(LIB_OPTION) -o $@
+$(OUT_ELF_FILE): $(OBJS) $(LDS_FILE_NAME)
+	$(CC) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
-$(OBJS): $(ASRC) $(CSRC) $(HEADER)
-	$(CC) $(ASRC) $(CSRC) $(INCLUDE) $(CFLAGS) 
+%.o: %.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-clean :
-	rm -f $(OUT_BIN_FILE)
-	rm -f $(OUT_ELF_FILE)
-	rm -f $(OUT_MAP_FILE)
-	rm -f $(OBJS)
-	rm -f $(DUMP)
+%.o: %.s
+	$(CC) $(CPPFLAGS) $(ASFLAGS) -c $< -o $@
 
-run: # for STM32CubeProgrammer
-	STM32_Programmer_CLI.exe -c port=SWD -w ./rom_0x08000000.elf -v -rst -q	
+-include $(DEPS)
+
+clean:
+	rm -f $(OUT_BIN_FILE) $(OUT_ELF_FILE) $(OUT_MAP_FILE)
+	rm -f $(OBJS) $(DEPS) __dump.txt __dump_all.txt
+
+run: $(OUT_ELF_FILE)
+	$(PROGRAMMER) -c port=SWD -w ./$(OUT_ELF_FILE) -v -rst -q
