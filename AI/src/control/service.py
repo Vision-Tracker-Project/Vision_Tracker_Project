@@ -18,8 +18,10 @@ class ServoMailbox:
 
     @property
     def is_open(self):
-        return (not self.service.stopping.is_set()
-                and (self.service.sender is None or self.service.sender.is_open))
+        # The video worker writes to this in-memory mailbox, not to the serial
+        # device. Keep accepting the latest servo target while UART reconnects;
+        # the control loop will transmit it after the port is available again.
+        return not self.service.stopping.is_set()
 
     def open(self):
         pass

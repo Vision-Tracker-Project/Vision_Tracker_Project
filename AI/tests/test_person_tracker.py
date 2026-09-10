@@ -16,6 +16,9 @@ class PersonTrackerTest(unittest.TestCase):
         self.frame = np.full((120, 160, 3), (30, 80, 180), np.uint8)
         self.tracker = PersonTracker(AppearanceReIdentifier(), reid_threshold=0.8)
 
+    def test_default_angles_match_stm32_center_position(self):
+        self.assertEqual(self.tracker.angles, (90, 90))
+
     def test_user_selects_only_person_under_point(self):
         detections = [person(3), person(8, (90, 10, 40, 80))]
         self.tracker.update(detections, self.frame, (160, 120), move_servos=False)

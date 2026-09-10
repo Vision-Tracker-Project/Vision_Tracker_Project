@@ -167,6 +167,18 @@ class InputTest(unittest.TestCase):
         service.tick()
         self.assertTrue(bytes(fake.written).endswith(packet.data))
 
+    def test_servo_mailbox_accepts_latest_target_while_uart_reconnects(self):
+        fake=FakeSerial()
+        sender=UartSender("fake",serial_factory=lambda **_:fake)
+        service=ControlService(controller=enabled(),sender=sender,clock=lambda:2)
+        packet=build_servo_packet(1,95)
+        self.assertFalse(sender.is_open)
+        self.assertTrue(service.mailbox.is_open)
+        service.mailbox.send((packet,))
+        service.tick()
+        service.tick()
+        self.assertTrue(bytes(fake.written).endswith(packet.data))
+
     def test_uart_failure_loop_closes_and_does_not_replay(self):
         c=enabled(); axes(c,0,-1)
         fake=FakeSerial()

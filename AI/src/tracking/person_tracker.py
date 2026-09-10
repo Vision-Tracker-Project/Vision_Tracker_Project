@@ -23,7 +23,7 @@ class PersonTrackingResult:
 
 
 class PersonTracker:
-    def __init__(self, reidentifier, pan_initial=0, tilt_initial=0,
+    def __init__(self, reidentifier, pan_initial=90, tilt_initial=90,
                  pan_range=(0, 180), tilt_range=(0, 180), filter_alpha=0.25,
                  gain=6.0, max_step_degrees=4.0,
                  pan_inverted=False, tilt_inverted=False,
