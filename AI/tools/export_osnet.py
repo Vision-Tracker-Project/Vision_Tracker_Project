@@ -5,14 +5,16 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--weights", required=True, help="Trained osnet_x0_25 checkpoint")
-    parser.add_argument("--output", default="models/osnet_x0_25.onnx")
+    parser.add_argument("--model", choices=("osnet_x0_25", "osnet_x0_5", "osnet_x1_0"),
+                        default="osnet_x0_5")
+    parser.add_argument("--weights", required=True, help="Trained ReID checkpoint")
+    parser.add_argument("--output")
     args = parser.parse_args()
     import torch
     import torchreid
 
     # Refuse incomplete checkpoints instead of exporting random feature layers.
-    model = torchreid.models.build_model(name="osnet_x0_25", num_classes=1000,
+    model = torchreid.models.build_model(name=args.model, num_classes=1000,
                                         pretrained=False, use_gpu=False)
     checkpoint = torch.load(args.weights, map_location="cpu", weights_only=True)
     state = checkpoint.get("state_dict", checkpoint)
@@ -23,7 +25,7 @@ def main():
     if missing or result.unexpected_keys:
         raise RuntimeError(f"Incompatible OSNet checkpoint: {missing}, {result.unexpected_keys}")
     model.eval()
-    output = Path(args.output)
+    output = Path(args.output or f"models/{args.model}.onnx")
     output.parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(model, torch.zeros(1, 3, 256, 128), str(output),
                       input_names=["images"], output_names=["embeddings"],

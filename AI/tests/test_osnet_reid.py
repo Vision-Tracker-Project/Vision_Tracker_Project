@@ -19,7 +19,8 @@ class OSNetTest(unittest.TestCase):
         reid = self.make_reid()
         frame = np.zeros((80, 40, 3), np.uint8)
         feature = reid.extract(frame, PersonDetection(1, (0, 0, 40, 80), 0.9))
-        self.assertAlmostEqual(float(np.linalg.norm(feature)), 1.0, places=5)
+        self.assertAlmostEqual(float(np.linalg.norm(feature.embedding)), 1.0, places=5)
+        self.assertAlmostEqual(float(np.linalg.norm(feature.color)), 1.0, places=5)
         blob = reid.net.setInput.call_args.args[0]
         self.assertEqual(blob.shape, (1, 3, 256, 128))
         self.assertAlmostEqual(float(blob[0, 0, 0, 0]), -0.485/0.229, places=5)
@@ -27,6 +28,36 @@ class OSNetTest(unittest.TestCase):
             reid.remember(feature)
         self.assertEqual(reid.samples, 10)
         self.assertAlmostEqual(reid.similarity(feature), 1.0, places=5)
+
+    def test_clothing_histogram_distinguishes_equal_osnet_embeddings(self):
+        reid = self.make_reid()
+        person = PersonDetection(1, (0, 0, 40, 80), 0.9)
+        red = np.full((80, 40, 3), (0, 0, 255), dtype=np.uint8)
+        blue = np.full((80, 40, 3), (255, 0, 0), dtype=np.uint8)
+        enrolled = reid.extract(red, person)
+        reid.remember(enrolled)
+
+        self.assertAlmostEqual(reid.similarity(enrolled), 1.0, places=5)
+        self.assertLess(reid.similarity(reid.extract(blue, person)), 0.9)
+
+        black = np.zeros((80, 40, 3), np.uint8)
+        white = np.full((80, 40, 3), 255, np.uint8)
+        reid.clear()
+        reid.remember(reid.extract(black, person))
+        self.assertLess(reid.similarity(reid.extract(white, person)), 0.9)
+
+    def test_similarity_uses_mean_of_top_gallery_samples(self):
+        reid = self.make_reid()
+        reid.top_k = 2
+        person = PersonDetection(1, (0, 0, 40, 80), 0.9)
+        frame = np.zeros((80, 40, 3), np.uint8)
+        query = reid.extract(frame, person)
+        reid.remember(query)
+        opposite = type(query)(-query.embedding, query.color)
+        reid.remember(opposite)
+
+        expected = (1.0 + (-0.6)) / 2
+        self.assertAlmostEqual(reid.similarity(query), expected, places=5)
 
     @patch('src.tracking.person_tracker.time.monotonic')
     def test_long_absence_confirmation_expiry_and_no_idle_inference(self, clock):

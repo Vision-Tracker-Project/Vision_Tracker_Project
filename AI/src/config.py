@@ -16,12 +16,23 @@ PERSON_MODEL_PATH = PERSON_ENGINE_PATH if PERSON_ENGINE_PATH.is_file() else AI_R
 PERSON_CONFIDENCE = 0.35
 PERSON_IMAGE_SIZE = 640
 PERSON_DEVICE = os.environ.get("VISION_PERSON_DEVICE") or None
-PERSON_REID_ENGINE_PATH = AI_ROOT / "models" / "osnet_x0_25.engine"
-PERSON_REID_ONNX_PATH = AI_ROOT / "models" / "osnet_x0_25.onnx"
-PERSON_REID_MODEL_PATH = Path(os.environ["VISION_REID_MODEL"]) if os.environ.get("VISION_REID_MODEL") else (
-    PERSON_REID_ENGINE_PATH if PERSON_REID_ENGINE_PATH.is_file() else PERSON_REID_ONNX_PATH
+PERSON_REID_MODEL_CANDIDATES = (
+    AI_ROOT / "models" / "osnet_x0_5.engine",
+    AI_ROOT / "models" / "osnet_x0_25.engine",
+    AI_ROOT / "models" / "osnet_x0_5.onnx",
+    AI_ROOT / "models" / "osnet_x0_25.onnx",
+)
+PERSON_REID_MODEL_PATH = (
+    Path(os.environ["VISION_REID_MODEL"])
+    if os.environ.get("VISION_REID_MODEL") else
+    next((path for path in PERSON_REID_MODEL_CANDIDATES if path.is_file()),
+         PERSON_REID_MODEL_CANDIDATES[0])
 )
 PERSON_REID_HISTORY_SIZE = 10
+PERSON_REID_TOP_K = max(1, int(os.environ.get("VISION_REID_TOP_K", "3")))
+PERSON_REID_COLOR_WEIGHT = min(
+    1.0, max(0.0, float(os.environ.get("VISION_REID_COLOR_WEIGHT", "0.2")))
+)
 PERSON_REID_INTERVAL_SECONDS = 0.5
 PERSON_REID_LOST_INTERVAL_SECONDS = float(os.environ.get("VISION_REID_LOST_INTERVAL", "0.1"))
 PERSON_REID_CANDIDATES_PER_STEP = max(

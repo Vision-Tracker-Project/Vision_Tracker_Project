@@ -1,11 +1,18 @@
 """Bounded selected-person OSNet gallery with TensorRT and ONNX backends."""
 
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 import time
 
 import cv2
 import numpy as np
+
+
+@dataclass(frozen=True)
+class OSNetDescriptor:
+    embedding: np.ndarray
+    color: np.ndarray
 
 
 class _TensorRTBackend:
@@ -72,22 +79,24 @@ class _TensorRTBackend:
 
 
 class OSNetReIdentifier:
-    method = "OSNet 512D / BoT-SORT"
+    method = "OSNet + 상하의 색상 / BoT-SORT"
 
-    def __init__(self, model_path, history_size=10):
+    def __init__(self, model_path, history_size=10, top_k=3, color_weight=0.2):
         path = Path(model_path)
         if not path.is_file():
             raise RuntimeError(f"OSNet 모델이 없습니다: {path}. AI/REID.md 참고")
         self._tensorrt = path.suffix == ".engine"
         if self._tensorrt:
             self.net = _TensorRTBackend(path)
-            self.backend = "TensorRT FP16"
+            self.backend = f"TensorRT FP16 ({path.stem})"
         else:
             self.net = cv2.dnn.readNetFromONNX(str(path))
             self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
             self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-            self.backend = "OpenCV DNN CPU"
+            self.backend = f"OpenCV DNN CPU ({path.stem})"
         self.gallery = deque(maxlen=max(1, int(history_size)))
+        self.top_k = max(1, int(top_k))
+        self.color_weight = min(1.0, max(0.0, float(color_weight)))
         self.elapsed_ms = 0.0
 
     @property
@@ -105,6 +114,7 @@ class OSNetReIdentifier:
             crop = frame[max(0, y):min(h, y+bh), max(0, x):min(w, x+bw)]
             if crop.size == 0 or min(crop.shape[:2]) < 8:
                 return None
+            color = self._color_descriptor(crop)
             rgb = cv2.cvtColor(cv2.resize(crop, (128, 256)), cv2.COLOR_BGR2RGB)
             tensor = rgb.astype(np.float32) / 255.0
             tensor = (tensor - np.array([0.485, 0.456, 0.406], np.float32)) / np.array([0.229, 0.224, 0.225], np.float32)
@@ -117,18 +127,55 @@ class OSNetReIdentifier:
             norm = np.linalg.norm(feature)
             if feature.size != 512 or not np.isfinite(feature).all() or norm <= 0:
                 raise RuntimeError("OSNet 출력은 유한한 512차원 임베딩이어야 합니다")
-            return feature / norm
+            return OSNetDescriptor(feature / norm, color)
         finally:
             self.elapsed_ms = (time.monotonic() - started) * 1000
 
     def remember(self, descriptor):
         if descriptor is not None:
-            self.gallery.append(descriptor.astype(np.float32, copy=True))
+            self.gallery.append(OSNetDescriptor(
+                descriptor.embedding.astype(np.float32, copy=True),
+                descriptor.color.astype(np.float32, copy=True),
+            ))
 
     def similarity(self, descriptor):
         if descriptor is None or not self.gallery:
             return None
-        return max(float(np.dot(saved, descriptor)) for saved in self.gallery)
+        embedding_weight = 1.0 - self.color_weight
+        scores = sorted((
+            embedding_weight * float(np.dot(saved.embedding, descriptor.embedding))
+            + self.color_weight * float(np.dot(saved.color, descriptor.color))
+            for saved in self.gallery
+        ), reverse=True)
+        selected = scores[:min(self.top_k, len(scores))]
+        return float(np.mean(selected))
+
+    @staticmethod
+    def _color_descriptor(crop):
+        """Return a cheap background-resistant upper/lower clothing descriptor."""
+        height, width = crop.shape[:2]
+        left, right = round(width * 0.1), round(width * 0.9)
+        regions = (
+            crop[round(height * 0.15):round(height * 0.55), left:right],
+            crop[round(height * 0.55):round(height * 0.95), left:right],
+        )
+        features = []
+        for region in regions:
+            if region.size == 0:
+                features.append(np.zeros(192, np.float32))
+                continue
+            hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+            histogram = cv2.calcHist(
+                [hsv], [0, 1, 2], None, [12, 4, 4],
+                [0, 180, 0, 256, 0, 256],
+            ).reshape(-1)
+            total = float(histogram.sum())
+            if total > 0:
+                histogram /= total
+            features.append(np.sqrt(histogram))
+        color = np.concatenate(features).astype(np.float32)
+        norm = float(np.linalg.norm(color))
+        return color / norm if norm > 0 else color
 
     def close(self):
         if self._tensorrt:

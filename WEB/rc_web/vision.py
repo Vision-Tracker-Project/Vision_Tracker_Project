@@ -44,8 +44,12 @@ class VisionService:
         with self.control:
             if self.worker and self.worker.is_alive():
                 raise RuntimeError('카메라 OFF 후 모드를 변경하세요.')
-            reidentifier = (OSNetReIdentifier(c.PERSON_REID_MODEL_PATH,
-                                             c.PERSON_REID_HISTORY_SIZE)
+            reidentifier = (OSNetReIdentifier(
+                                c.PERSON_REID_MODEL_PATH,
+                                c.PERSON_REID_HISTORY_SIZE,
+                                top_k=c.PERSON_REID_TOP_K,
+                                color_weight=c.PERSON_REID_COLOR_WEIGHT,
+                            )
                             if mode == 'ai' else AppearanceReIdentifier())
             detector = PersonDetector(c.PERSON_MODEL_PATH, confidence=c.PERSON_CONFIDENCE,
                                       image_size=c.PERSON_IMAGE_SIZE,
