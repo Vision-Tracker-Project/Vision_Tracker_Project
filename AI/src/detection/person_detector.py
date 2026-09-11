@@ -15,7 +15,7 @@ class PersonDetectorError(RuntimeError):
 
 
 class _NumpyBoxes:
-    """Ultralytics ByteTrack에 필요한 최소 검출 결과 인터페이스."""
+    """Ultralytics BoT-SORT에 필요한 최소 검출 결과 인터페이스."""
 
     def __init__(self, xyxy, confidence):
         self.xyxy = np.asarray(xyxy, dtype=np.float32).reshape(-1, 4)
@@ -137,71 +137,32 @@ class PersonDetection:
 class PersonDetector:
     """한 프레임씩 COCO class 0(person)만 검출하며 BoT-SORT 상태를 유지한다."""
 
-    def __init__(self, model_path, confidence=0.35, image_size=640,
-                 device="cpu", tracker=None):
-        tracker = tracker or str(Path(__file__).with_name("botsort.yaml"))
+    def __init__(self, model_path, confidence=0.35):
         path = Path(model_path)
         if not path.is_file():
-            raise PersonDetectorError(f"사람 검출 모델 파일을 찾을 수 없습니다: {path}")
-        self._tensorrt = path.suffix == ".engine"
+            raise PersonDetectorError(f"사람 검출 TensorRT 엔진이 없습니다: {path}")
+        if path.suffix != ".engine":
+            raise PersonDetectorError(f"사람 검출은 TensorRT .engine만 지원합니다: {path}")
         try:
-            if self._tensorrt:
-                from ultralytics.trackers.bot_sort import BOTSORT
-                self.model = _TensorRTDetectorBackend(path)
-                self.byte_tracker = BOTSORT(SimpleNamespace(
-                    track_high_thresh=0.25, track_low_thresh=0.1,
-                    new_track_thresh=0.25, track_buffer=30,
-                    match_thresh=0.8, fuse_score=True,
-                    gmc_method="sparseOptFlow", with_reid=False,
-                    proximity_thresh=0.5, appearance_thresh=0.8, model="auto",
-                ))
-            else:
-                from ultralytics import YOLO
-                self.model = YOLO(str(path), task="detect")
+            from ultralytics.trackers.bot_sort import BOTSORT
+            self.model = _TensorRTDetectorBackend(path)
+            self.byte_tracker = BOTSORT(SimpleNamespace(
+                track_high_thresh=0.25, track_low_thresh=0.1,
+                new_track_thresh=0.25, track_buffer=30,
+                match_thresh=0.8, fuse_score=True,
+                gmc_method="sparseOptFlow", with_reid=False,
+                proximity_thresh=0.5, appearance_thresh=0.8, model="auto",
+            ))
         except Exception as error:
             raise PersonDetectorError(f"사람 검출 모델 로드 실패: {error}") from error
         self.confidence = confidence
-        self.image_size = image_size
-        self.device = device
-        self.tracker = tracker
         self.model_name = path.stem
         self.elapsed_ms = 0.0
 
     def detect(self, frame):
         started = time.monotonic()
-        if self._tensorrt:
-            detections = self._detect_tensorrt(frame)
-            self.elapsed_ms = (time.monotonic() - started) * 1000.0
-            return detections
-        try:
-            result = self.model.track(
-                source=frame,
-                persist=True,
-                tracker=self.tracker,
-                classes=[0],
-                conf=self.confidence,
-                imgsz=self.image_size,
-                device=self.device,
-                verbose=False,
-            )[0]
-        except Exception as error:
-            raise PersonDetectorError(f"사람 검출 추론 실패: {error}") from error
+        detections = self._detect_tensorrt(frame)
         self.elapsed_ms = (time.monotonic() - started) * 1000.0
-        if result.boxes is None or not len(result.boxes):
-            return []
-
-        boxes = result.boxes.xyxy.cpu().numpy()
-        scores = result.boxes.conf.cpu().numpy()
-        ids = result.boxes.id
-        track_ids = ids.int().cpu().tolist() if ids is not None else [-1] * len(boxes)
-        detections = []
-        for box, score, track_id in zip(boxes, scores, track_ids):
-            x1, y1, x2, y2 = box.round().astype(int)
-            detections.append(PersonDetection(
-                track_id=int(track_id),
-                box=(int(x1), int(y1), max(1, int(x2-x1)), max(1, int(y2-y1))),
-                confidence=float(score),
-            ))
         return detections
 
     def _detect_tensorrt(self, frame):
@@ -243,8 +204,7 @@ class PersonDetector:
         ) for track in tracks]
 
     def close(self):
-        if self._tensorrt:
-            self.model.close()
+        self.model.close()
 
     @staticmethod
     def draw(frame, detections, selected_id=None):

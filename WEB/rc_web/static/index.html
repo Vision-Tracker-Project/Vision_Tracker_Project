@@ -6,31 +6,30 @@
   <meta name="theme-color" content="#0d1726">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Jetson RC">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Wi-Fi를 통한 Jetson 수동 방향 명령 수신 검증">
+  <meta name="apple-mobile-web-app-title" content="Vision Tracker">
+  <meta name="description" content="Jetson 사람 추적과 게임패드 차량 상태">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
   <script src="/static/vision.js" defer></script>
-  <title>Jetson RC · 명령 수신 확인</title>
+  <title>Jetson Vision Tracker</title>
 </head>
 <body>
   <main>
     <header>
-      <div><p class="eyebrow">JETSON / WI-FI CONTROL</p><h1>RC 컨트롤</h1></div>
+      <div><p class="eyebrow">JETSON VISION TRACKER</p><h1>사람 추적 · 차량 제어</h1></div>
       <span id="connection" class="badge" role="status">연결 확인 중</span>
     </header>
-    <div class="notice"><span class="dot"></span>수동 방향 명령: 수신 검증 모드 · 하드웨어 전송 없음</div>
+
     <section class="card vision-panel">
-      <h2>Vision Tracker · 사람 검출 / ReID</h2>
+      <h2>카메라 · 사람 검출 / ReID</h2>
       <canvas id="video" width="640" height="480" aria-label="추적할 사람을 선택하는 카메라 화면"></canvas>
-      <p class="target-help">실시간 화면에서 추적할 사람을 누르세요. 빈 곳을 누르면 선택이 해제됩니다.</p>
+      <p class="target-help">화면에서 추적할 사람을 누르세요. 빈 곳을 누르면 선택이 해제됩니다.</p>
       <p id="vision-status" role="status">카메라 상태 확인 중</p>
       <div class="vision-actions">
         <select id="vision-mode" aria-label="카메라 모드">
-          <option value="ai">YOLO Person + ReID 영상</option><option value="raw">JPEG 영상 (AI 끔)</option>
+          <option value="ai">YOLO Person + ReID 영상</option>
+          <option value="raw">JPEG 영상 (AI 끔)</option>
           <option value="camera">카메라만 (기준 FPS, 영상 없음)</option>
         </select>
         <button id="camera-on">카메라 ON</button><button id="camera-off">카메라 OFF</button>
@@ -47,42 +46,40 @@
         <div><dt>ReID 프로필</dt><dd id="reid-profile">0장</dd></div>
         <div><dt>ReID 방식</dt><dd id="reid-method">—</dd></div>
       </dl>
-      <button id="benchmark">30초 수신 측정</button><pre id="benchmark-result" style="white-space:pre-wrap"></pre>
-      <p class="hint">대상 선택과 사람 검출은 계속 실행됩니다. 팬·틸트 시작 버튼은 선택된 대상의 UART 제어를 활성화합니다.</p>
+      <button id="benchmark">30초 수신 측정</button><pre id="benchmark-result"></pre>
+      <p class="hint">대상 검출은 계속 실행됩니다. 팬·틸트 시작은 선택 대상의 UART 제어만 활성화합니다.</p>
     </section>
-    <div class="panels">
-      <section class="card controls" aria-labelledby="control-title">
-        <div class="section-heading"><h2 id="control-title">수동 명령</h2><span>1번 누름 = 1건 전송</span></div>
-        <div class="dpad" aria-label="방향 명령">
-          <button type="button" class="direction forward" data-command="FORWARD"><span aria-hidden="true">↑</span>전진</button>
-          <button type="button" class="direction left" data-command="LEFT"><span aria-hidden="true">←</span>좌회전</button>
-          <div class="pad-center" aria-hidden="true">RC<br><small>WI-FI</small></div>
-          <button type="button" class="direction right" data-command="RIGHT"><span aria-hidden="true">→</span>우회전</button>
-          <button type="button" class="direction backward" data-command="BACKWARD"><span aria-hidden="true">↓</span>후진</button>
+
+    <section id="controller-panel" class="card controller-panel" aria-labelledby="controller-title">
+      <div class="section-heading">
+        <h2 id="controller-title">게임패드 · RC 차량</h2>
+        <span id="controller-connection" class="state-chip">입력 장치 대기</span>
+      </div>
+      <div class="controller-grid">
+        <div class="stick-wrap">
+          <div id="controller-stick" class="controller-stick" aria-label="게임패드 방향 입력">
+            <span class="stick-axis horizontal"></span><span class="stick-axis vertical"></span>
+            <span id="stick-dot" class="stick-dot"></span>
+          </div>
+          <strong id="controller-direction">정지</strong>
+          <span id="controller-axes" class="subtle">X 0 · Y 0</span>
         </div>
-        <p class="hint">방향을 눌러 Jetson의 해석 결과 확인<br>길게 눌러도 주기적으로 전송하지 않음</p>
-        <p id="pending" class="pending">전송 대기 0건</p>
-      </section>
-      <section class="card feedback" aria-labelledby="feedback-title">
-        <div class="section-heading"><h2 id="feedback-title">이 기기의 마지막 요청</h2><span id="request-number">—</span></div>
-        <dl class="metrics">
-          <div><dt>마지막 전송 명령</dt><dd id="last-sent">—</dd></div>
-          <div><dt>Jetson이 해석한 동작</dt><dd id="action">—</dd></div>
-          <div><dt>Jetson 수신 시각</dt><dd id="received-at">—</dd></div>
-          <div><dt>클라이언트 IP</dt><dd id="client-ip">—</dd></div>
-        </dl>
-        <p id="result" class="result" role="status" aria-live="polite">방향 버튼을 누르면 수신 결과가 여기에 표시됨</p>
-        <p class="hint">응답 지연 시 자동 재전송 없음. 아래 서버 기록으로 수신 여부 확인.</p>
-      </section>
-    </div>
-    <section class="card history-panel" aria-labelledby="history-title">
-      <div class="section-heading"><h2 id="history-title">Jetson 수신 기록</h2><span id="history-count">0건</span></div>
-      <p id="server-latest" class="hint">서버 명령 대기</p>
-      <p id="history-status" class="hint">1초 간격으로 서버 상태 확인</p>
-      <ol id="history" class="history"><li class="empty">아직 받은 명령이 없음</li></ol>
+        <div class="motor-output">
+          <div class="motor-row"><span>왼쪽 모터</span><div class="motor-track"><i id="left-motor-bar"></i></div><strong id="left-motor">0</strong></div>
+          <div class="motor-row"><span>오른쪽 모터</span><div class="motor-track"><i id="right-motor-bar"></i></div><strong id="right-motor">0</strong></div>
+          <p class="motor-help"><span class="forward-key"></span>전진 <span class="reverse-key"></span>후진 · 출력 범위 -100~100</p>
+        </div>
+      </div>
+      <dl class="controller-detail">
+        <div><dt>주행 허용</dt><dd id="controller-armed">잠김</dd></div>
+        <div><dt>Enable 버튼</dt><dd id="controller-enable">놓음</dd></div>
+        <div><dt>정지 버튼</dt><dd id="controller-stop">놓음</dd></div>
+        <div><dt>속도 단계</dt><dd id="controller-speed">—</dd></div>
+      </dl>
+      <p id="controller-reason" class="hint">게임패드 상태 확인 중</p>
     </section>
-    <footer>같은 Wi-Fi에서 사용 · 수신·해석만 검증 · <a href="/docs">API 문서</a></footer>
-    <noscript>방향 명령을 전송하려면 Safari에서 JavaScript 사용 필요.</noscript>
+    <footer>차량 조작은 Jetson에 연결된 USB 게임패드에서만 수행됩니다.</footer>
+    <noscript>실시간 상태를 보려면 JavaScript를 활성화하세요.</noscript>
   </main>
 </body>
 </html>

@@ -184,21 +184,23 @@ class VideoWorker(threading.Thread):
                 else:
                     self.tracking_updated.emit(None)
 
+                selected_id = self.tracker.selected_id if self.tracker is not None else None
                 if self.detector is not None:
-                    self.detector.draw(frame, detections, self.tracker.selected_id)
-                self.tracker.draw(frame, tracking)
+                    self.detector.draw(frame, detections, selected_id)
+                if self.tracker is not None:
+                    self.tracker.draw(frame, tracking)
                 self.people_updated.emit([{
                     "track_id": person.track_id,
                     "box": list(person.box),
                     "confidence": person.confidence,
                     "reid_similarity": person.reid_similarity,
-                    "selected": person.track_id == self.tracker.selected_id,
+                    "selected": person.track_id == selected_id,
                 } for person in detections])
                 self.detector_status_updated.emit({
                     "inference_ms": self.detector.elapsed_ms if self.detector else 0.0,
                     "model": getattr(self.detector, "model_name", "YOLO Person") if self.detector else None,
                 })
-                self.target_status_updated.emit(self.tracker.status())
+                self.target_status_updated.emit(self.tracker.status() if self.tracker else None)
                 self.frame_ready.emit(frame, captured_at)
 
                 completed_at = time.monotonic()

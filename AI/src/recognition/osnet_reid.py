@@ -1,4 +1,4 @@
-"""Bounded selected-person OSNet gallery with TensorRT and ONNX backends."""
+"""TensorRT OSNet 기반 선택 인물 ReID 갤러리."""
 
 from collections import deque
 from pathlib import Path
@@ -77,16 +77,11 @@ class OSNetReIdentifier:
     def __init__(self, model_path, history_size=10):
         path = Path(model_path)
         if not path.is_file():
-            raise RuntimeError(f"OSNet 모델이 없습니다: {path}. AI/REID.md 참고")
-        self._tensorrt = path.suffix == ".engine"
-        if self._tensorrt:
-            self.net = _TensorRTBackend(path)
-            self.backend = "TensorRT FP16"
-        else:
-            self.net = cv2.dnn.readNetFromONNX(str(path))
-            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-            self.backend = "OpenCV DNN CPU"
+            raise RuntimeError(f"OSNet TensorRT 엔진이 없습니다: {path}")
+        if path.suffix != ".engine":
+            raise RuntimeError(f"OSNet은 TensorRT .engine만 지원합니다: {path}")
+        self.net = _TensorRTBackend(path)
+        self.backend = "TensorRT FP16"
         self.gallery = deque(maxlen=max(1, int(history_size)))
         self.elapsed_ms = 0.0
 
@@ -109,11 +104,7 @@ class OSNetReIdentifier:
             tensor = rgb.astype(np.float32) / 255.0
             tensor = (tensor - np.array([0.485, 0.456, 0.406], np.float32)) / np.array([0.229, 0.224, 0.225], np.float32)
             tensor = np.ascontiguousarray(tensor.transpose(2, 0, 1)[None])
-            if self._tensorrt:
-                feature = self.net.infer(tensor).reshape(-1).astype(np.float32)
-            else:
-                self.net.setInput(tensor)
-                feature = self.net.forward().reshape(-1).astype(np.float32)
+            feature = self.net.infer(tensor).reshape(-1).astype(np.float32)
             norm = np.linalg.norm(feature)
             if feature.size != 512 or not np.isfinite(feature).all() or norm <= 0:
                 raise RuntimeError("OSNet 출력은 유한한 512차원 임베딩이어야 합니다")
@@ -131,5 +122,4 @@ class OSNetReIdentifier:
         return max(float(np.dot(saved, descriptor)) for saved in self.gallery)
 
     def close(self):
-        if self._tensorrt:
-            self.net.close()
+        self.net.close()

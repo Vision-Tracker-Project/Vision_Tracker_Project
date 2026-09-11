@@ -1,58 +1,15 @@
-# BoT-SORT + OSNet
+# BoT-SORT + OSNet x0.25 TensorRT ReID
 
-Both YOLO .pt and direct TensorRT .engine paths use BoT-SORT with sparse optical
-flow camera motion compensation. Its internal appearance encoder is disabled;
-OSNet handles selected-person long-term recovery separately. The short-term
-buffer is 30 tracker updates, not a guaranteed number of wall-clock seconds.
+YOLO TensorRT 검출 결과를 BoT-SORT가 짧게 이어가고, 사용자가 선택한 사람이
+화면에서 사라진 경우 OSNet x0.25 TensorRT 임베딩으로 다시 찾습니다.
+BoT-SORT 내부 ReID는 끄고 OSNet만 장기 재식별에 사용합니다.
 
-OSNet runs only after selection: one target crop every 0.5 seconds while tracked,
-and visible tracked candidates every 0.5 seconds while lost. Ten normalized
-512D float32 vectors are kept (20 KiB of vector storage, excluding model/runtime).
-No image gallery is retained. Candidate count and inference time still affect latency.
-The TensorRT FP16 engine is preferred when present; OpenCV DNN CPU runs as the ONNX fallback.
+- 엔진: `models/osnet_x0_25.engine` (TensorRT FP16, 입력 1×3×256×128, 출력 512D)
+- 추출 주기: 선택 대상을 추적하거나 잃어버린 후보를 비교할 때 0.5초 간격
+- 갤러리: 정규화된 특징 최대 10개, 이미지 저장 없음
+- 재연결: 코사인 유사도 0.85 이상, 차순위보다 0.06 이상 높고 2회 연속 일치
+- 유효 시간: 대상 유실 후 60초
 
-Recovery requires cosine similarity >= 0.85, a >= 0.06 lead over the runner-up,
-and the same candidate passing two consecutive comparison rounds. After 60 seconds
-without the target, selection and gallery expire. New selection clears the gallery.
-These thresholds are initial defaults requiring scene-specific validation; clothes
-and pose similarity can still produce false matches, including short-track ID swaps.
-
-## Prepare trained weights once
-
-Use the official torchreid repository and its **ReID-trained osnet_x0_25** checkpoint:
-https://github.com/KaiyangZhou/deep-person-reid/blob/master/docs/MODEL_ZOO.md
-Do not substitute ImageNet-only initialization or an arbitrary OSNet architecture.
-Weights are not bundled and are not downloaded at service startup.
-
-On a development machine with torch, torchvision, onnx and the official torchreid
-package installed, export the downloaded checkpoint:
-
-```bash
-cd AI
-python tools/export_osnet.py --weights /path/to/osnet_x0_25_checkpoint.pth --output models/osnet_x0_25.onnx
-```
-
-Copy the exported model to Jetson's `AI/models/osnet_x0_25.onnx`. The model contract
-is fixed input 1x3x256x128, RGB ImageNet normalization, output 1x512 embedding.
-The runtime needs no torchreid installation. Missing weights produce an explicit
-AI startup error; there is no silent HSV fallback.
-
-Build an FP16 engine on the target Jetson (TensorRT engines are device/version specific):
-
-```bash
-/usr/src/tensorrt/bin/trtexec --onnx=models/osnet_x0_25.onnx \
-  --saveEngine=models/osnet_x0_25.engine --fp16 --skipInference
-```
-
-If `models/osnet_x0_25.engine` exists it is selected automatically. Set
-`VISION_REID_MODEL` only when an explicit engine or ONNX path is required.
-
-Environment overrides: `VISION_REID_MODEL` (absolute TensorRT engine or ONNX path),
-`VISION_REID_TIMEOUT` (seconds), `VISION_REID_THRESHOLD` (cosine threshold).
-For autostart, set overrides in the service environment, not just an interactive shell.
-Once the model is installed, restart the existing vision-tracker-web service.
-
-Validate on Jetson by selecting a person, leaving the image for >3 seconds,
-returning within 60 seconds, and checking `ReID 재연결`. Also test similar clothes,
-two simultaneous candidates, expired recovery, and reselection. Inspect `reid_ms`
-and video processing latency; no hardware performance claim is made by unit tests.
+ONNX CPU 또는 다른 OSNet 모델로 자동 폴백하지 않습니다. 엔진 누락이나 형식
+불일치는 시작 오류로 처리합니다. 임계값은 `VISION_REID_THRESHOLD`, 유효 시간은
+`VISION_REID_TIMEOUT` 환경 변수로 조정할 수 있습니다.

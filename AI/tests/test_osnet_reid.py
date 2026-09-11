@@ -11,16 +11,16 @@ from src.tracking.person_tracker import PersonTracker
 class OSNetTest(unittest.TestCase):
     def make_reid(self):
         with patch('src.recognition.osnet_reid.Path.is_file', return_value=True), patch(
-                'src.recognition.osnet_reid.cv2.dnn.readNetFromONNX') as load:
-            load.return_value.forward.return_value = np.ones((1, 512), np.float32)
-            return OSNetReIdentifier('fake.onnx', history_size=10)
+                'src.recognition.osnet_reid._TensorRTBackend') as load:
+            load.return_value.infer.return_value = np.ones((1, 512), np.float32)
+            return OSNetReIdentifier('fake.engine', history_size=10)
 
     def test_normalization_and_bounded_gallery(self):
         reid = self.make_reid()
         frame = np.zeros((80, 40, 3), np.uint8)
         feature = reid.extract(frame, PersonDetection(1, (0, 0, 40, 80), 0.9))
         self.assertAlmostEqual(float(np.linalg.norm(feature)), 1.0, places=5)
-        blob = reid.net.setInput.call_args.args[0]
+        blob = reid.net.infer.call_args.args[0]
         self.assertEqual(blob.shape, (1, 3, 256, 128))
         self.assertAlmostEqual(float(blob[0, 0, 0, 0]), -0.485/0.229, places=5)
         for _ in range(50):
@@ -37,12 +37,12 @@ class OSNetTest(unittest.TestCase):
         original = PersonDetection(1, (0, 0, 40, 80), 0.9)
         replacement = PersonDetection(9, (0, 0, 40, 80), 0.9)
         tracker.update([original], frame, (40, 80))
-        reid.net.forward.assert_not_called()
+        reid.net.infer.assert_not_called()
         tracker.select_at(0.5, 0.5)
         tracker.update([original], frame, (40, 80))
         clock.return_value = 100.1
         tracker.update([original], frame, (40, 80))
-        self.assertEqual(reid.net.forward.call_count, 1)
+        self.assertEqual(reid.net.infer.call_count, 1)
         clock.return_value = 110
         self.assertIsNone(tracker.update([replacement], frame, (40, 80)))
         clock.return_value = 110.6

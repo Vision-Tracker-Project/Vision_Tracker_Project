@@ -34,6 +34,16 @@ def enabled():
 
 
 class InputTest(unittest.TestCase):
+    def test_web_status_reports_controller_input_and_motor_output(self):
+        c = enabled()
+        axes(c, -1, -1)
+        state = ControlService(controller=c).status()
+        self.assertEqual(state["direction"], "좌전진")
+        self.assertEqual((state["x"], state["y"]), (-1, -1))
+        self.assertEqual((state["left_motor"], state["right_motor"]), (20, 40))
+        self.assertTrue(state["connected"])
+        self.assertTrue(state["armed"])
+
     def test_default_vehicle_pwm_table(self):
         expected = {(0,-1):(80,80), (0,1):(-80,-80), (-1,0):(-80,80),
                     (1,0):(80,-80), (-1,-1):(80,100), (1,-1):(100,80),

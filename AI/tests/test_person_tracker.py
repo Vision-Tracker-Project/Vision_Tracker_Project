@@ -1,10 +1,39 @@
 import unittest
+from collections import deque
 
 import numpy as np
 
 from src.detection.person_detector import PersonDetection
-from src.recognition.appearance_reid import AppearanceReIdentifier
 from src.tracking.person_tracker import PersonTracker
+
+
+class FakeReIdentifier:
+    """추적 제어 테스트에서 신경망을 대신하는 고정 특징 구현."""
+
+    method = "test descriptor"
+
+    def __init__(self):
+        self.gallery = deque(maxlen=10)
+        self.elapsed_ms = 0.0
+
+    @property
+    def samples(self):
+        return len(self.gallery)
+
+    def clear(self):
+        self.gallery.clear()
+
+    def extract(self, frame, detection):
+        return np.ones(4, np.float32) / 2
+
+    def remember(self, descriptor):
+        if descriptor is not None:
+            self.gallery.append(descriptor.copy())
+
+    def similarity(self, descriptor):
+        if descriptor is None:
+            return None
+        return max((float(np.dot(item, descriptor)) for item in self.gallery), default=None)
 
 
 def person(track_id, box=(10, 10, 40, 80)):
@@ -14,7 +43,7 @@ def person(track_id, box=(10, 10, 40, 80)):
 class PersonTrackerTest(unittest.TestCase):
     def setUp(self):
         self.frame = np.full((120, 160, 3), (30, 80, 180), np.uint8)
-        self.tracker = PersonTracker(AppearanceReIdentifier(), reid_threshold=0.8)
+        self.tracker = PersonTracker(FakeReIdentifier(), reid_threshold=0.8)
 
     def test_default_angles_match_stm32_center_position(self):
         self.assertEqual(self.tracker.angles, (90, 90))
@@ -43,7 +72,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_box_jitter_inside_safe_area_does_not_move_servos(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             boundary_confirm_frames=3,
         )
         centered = person(3, (50, 20, 60, 80))
@@ -55,7 +84,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_boundary_requires_three_consecutive_frames_before_motion(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             pan_inverted=False, boundary_confirm_frames=3, box_history_size=1,
         )
         centered = person(3, (50, 20, 60, 80))
@@ -70,7 +99,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_oversized_box_crossing_both_edges_does_not_chase(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             boundary_confirm_frames=1, box_history_size=1,
         )
         large = person(3, (0, 20, 160, 80))
@@ -81,7 +110,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_angle_changes_only_when_control_step_is_due(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             pan_inverted=False, boundary_confirm_frames=1, box_history_size=1,
         )
         centered = person(3, (50, 20, 60, 80))
@@ -102,7 +131,7 @@ class PersonTrackerTest(unittest.TestCase):
     def test_fast_edge_exit_predicts_pan_then_stops(self):
         now = [0.0]
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             pan_inverted=False, boundary_confirm_frames=1, box_history_size=1,
             predictive_pan_duration=0.8, predictive_pan_max_degrees=15,
             predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
@@ -132,7 +161,7 @@ class PersonTrackerTest(unittest.TestCase):
     def test_exit_away_from_edge_does_not_predict_pan(self):
         now = [0.0]
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_inverted=False,
+            FakeReIdentifier(), pan_inverted=False,
             predictive_pan_min_speed=0.1, predictive_pan_edge_margin=0.15,
             predictive_motion_window=0.35, clock=lambda: now[0],
         )
@@ -148,7 +177,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_tilt_uses_estimated_head_instead_of_full_body_center(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             tilt_inverted=False, boundary_confirm_frames=1, box_history_size=1,
             head_box_ratio=0.10,
         )
@@ -162,7 +191,7 @@ class PersonTrackerTest(unittest.TestCase):
 
     def test_pan_can_confirm_faster_than_tilt(self):
         tracker = PersonTracker(
-            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            FakeReIdentifier(), pan_initial=90, tilt_initial=90,
             pan_inverted=False, boundary_confirm_frames=3,
             pan_confirm_frames=2, tilt_confirm_frames=3, box_history_size=1,
         )

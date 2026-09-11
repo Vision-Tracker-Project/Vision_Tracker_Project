@@ -1,5 +1,5 @@
-"""얼굴 검출 모듈."""
+"""사람 검출 모듈."""
 
-from .yunet_detector import FaceDetection, YuNetDetector, YuNetError
+from .person_detector import PersonDetection, PersonDetector, PersonDetectorError
 
-__all__ = ["FaceDetection", "YuNetDetector", "YuNetError"]
+__all__ = ["PersonDetection", "PersonDetector", "PersonDetectorError"]

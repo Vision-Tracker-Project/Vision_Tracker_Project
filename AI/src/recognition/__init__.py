@@ -1,5 +1,5 @@
-"""얼굴 특징 추출 모듈."""
+"""사람 외형 ReID 모듈."""
 
-from .sface_extractor import FaceEmbedding, SFaceError, SFaceExtractor
+from .osnet_reid import OSNetReIdentifier
 
-__all__ = ["FaceEmbedding", "SFaceError", "SFaceExtractor"]
+__all__ = ["OSNetReIdentifier"]

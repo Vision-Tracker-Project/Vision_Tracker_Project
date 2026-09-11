@@ -59,6 +59,32 @@ class ControlService:
         self.last_log_state = None
         self.mailbox = ServoMailbox(self)
 
+    def status(self):
+        """웹 표시용 게임패드와 실제 차량 출력의 최신 상태."""
+        controller = self.controller
+        left, right = controller.output()
+        directions = {
+            (0, 0): "정지", (0, -1): "전진", (0, 1): "후진",
+            (-1, 0): "좌회전", (1, 0): "우회전",
+            (-1, -1): "좌전진", (1, -1): "우전진",
+            (-1, 1): "좌후진", (1, 1): "우후진",
+        }
+        return {
+            "connected": controller.connected,
+            "armed": controller.armed and "enable" in controller.buttons,
+            "x": controller.x,
+            "y": controller.y,
+            "direction": directions.get((controller.x, controller.y), "알 수 없음"),
+            "left_motor": left,
+            "right_motor": right,
+            "speed_level": controller.level + 1,
+            "speed_level_count": len(controller.settings.speeds),
+            "speed": controller.settings.speeds[controller.level],
+            "enable_pressed": "enable" in controller.buttons,
+            "stop_pressed": "stop" in controller.buttons,
+            "reason": controller.reason,
+        }
+
     def transmit(self, pair):
         packet = build_vehicle_packet(*pair)
         reason = (("direction neutral" if self.controller.armed and not any(pair)

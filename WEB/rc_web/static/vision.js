@@ -8,6 +8,46 @@
   const number = value => Number.isFinite(value) ? value : 0;
   const reusableImage = new Image();
 
+  function connection(online) {
+    $('connection').textContent = online ? 'Jetson 연결됨' : 'Jetson 연결 실패';
+    $('connection').className = `badge ${online ? 'online' : 'offline'}`;
+  }
+
+  function motorBar(id, value) {
+    const bar = $(id);
+    const amount = Math.min(100, Math.abs(number(value))) / 2;
+    bar.style.left = value < 0 ? `${50 - amount}%` : '50%';
+    bar.style.width = `${amount}%`;
+    bar.style.background = value < 0 ? '#f19a87' : '#65dfd1';
+  }
+
+  function renderController(controller) {
+    const available = controller !== null && controller !== undefined;
+    const connected = available && controller.connected;
+    $('controller-connection').textContent = !available ? '통합 제어 꺼짐' :
+      connected ? '게임패드 연결됨' : '입력 장치 대기';
+    $('controller-connection').className = `state-chip ${connected ? 'online' : 'offline'}`;
+    const x = connected ? number(controller.x) : 0;
+    const y = connected ? number(controller.y) : 0;
+    $('stick-dot').style.left = `${50 + x * 30}%`;
+    $('stick-dot').style.top = `${50 + y * 30}%`;
+    $('controller-direction').textContent = connected ? controller.direction : '정지';
+    $('controller-axes').textContent = `X ${x} · Y ${y}`;
+    const left = available ? number(controller.left_motor) : 0;
+    const right = available ? number(controller.right_motor) : 0;
+    $('left-motor').textContent = left > 0 ? `+${left}` : `${left}`;
+    $('right-motor').textContent = right > 0 ? `+${right}` : `${right}`;
+    motorBar('left-motor-bar', left);
+    motorBar('right-motor-bar', right);
+    $('controller-armed').textContent = controller?.armed ? '주행 가능' : '안전 잠김';
+    $('controller-enable').textContent = controller?.enable_pressed ? '누름' : '놓음';
+    $('controller-stop').textContent = controller?.stop_pressed ? '누름' : '놓음';
+    $('controller-speed').textContent = available ?
+      `${controller.speed_level} / ${controller.speed_level_count} · ${controller.speed}%` : '—';
+    $('controller-reason').textContent = available ? `제어 상태: ${controller.reason}` :
+      '게임패드 통합 실행에서 상태가 표시됩니다.';
+  }
+
   async function decodeFrame(blob) {
     if ('createImageBitmap' in window) {
       return await createImageBitmap(blob);
@@ -83,6 +123,7 @@
   async function statusLoop() {
     try {
       state = await api('status');
+      connection(true);
       if (session !== state.session) {
         session = state.session;
         sequence = 0;
@@ -114,6 +155,7 @@
         (target.reid_candidate_id == null ? '' : ` · 후보 ID ${target.reid_candidate_id}`);
       $('reid-profile').textContent = `${number(target.reid_profile_samples)}장 · 판정 ${(number(target.reid_threshold) * 100).toFixed(0)}%`;
       $('reid-method').textContent = target.reid_method || '—';
+      renderController(state.controller);
       if (measurement && (!state.running || session !== measurement.session)) {
         measurement = null;
         $('benchmark-result').textContent = '카메라 상태가 바뀌어 측정을 취소했습니다.';
@@ -135,8 +177,11 @@
           `AI 프레임 나이 ${number(state.frame_age_ms).toFixed(1)}ms · AI 건너뜀 ${number(state.inference_frames_skipped)}장`;
         await api('report', report);
       }
-    } catch (error) { $('vision-status').textContent = `연결 오류: ${error.message}`; }
-    setTimeout(statusLoop, 1000);
+    } catch (error) {
+      connection(false);
+      $('vision-status').textContent = `연결 오류: ${error.message}`;
+    }
+    setTimeout(statusLoop, 250);
   }
 
   async function videoLoop() {

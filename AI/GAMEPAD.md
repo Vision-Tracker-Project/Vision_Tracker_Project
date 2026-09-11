@@ -107,7 +107,7 @@ watchdog이 담당한다. OS/USB 버퍼 지연까지 실시간 보장하는 구�
 
 `python -m unittest tests.test_vehicle_control tests.test_gamepad_device tests.test_uart_protocol -v`는 합성 입력, 가짜 UART·시간, 실제 `STM32/vehicle.c`를 호스트 GCC로 컴파일한 DLL/공유 라이브러리를 사용한다. GCC가 없으면 C 테스트는 skip이다. `python -m unittest discover -s tests -v`, `python -m compileall -q main.py src tests`는 기존 전체 테스트와 문법 검사다. `STM32/`의 `make`는 펌웨어 빌드만 한다. **`make run`은 업로드 명령이므로 이 작업에서는 실행하지 않았다.**
 
-2026-09-08 Windows 검증: 차량·장치 어댑터·기존 UART 테스트 27개 통과, Python compileall 통과, ARM GNU 15.2.1 펌웨어 빌드·링크 통과. 전체 discover는 기존 카메라·추적·SFace·YuNet 테스트 4개 모듈이 현재 Python의 `cv2`/`numpy` 미설치로 import 실패했다. 실제 Linux evdev, Qt GUI 실행, 전기적 PWM·모터 동작은 이 Windows 환경에서 검증하지 않았다. MSYS2 호스트 GCC의 DLL 경로 충돌을 피하도록 C 테스트는 해당 GCC의 bin을 자식 프로세스 PATH 앞에 둔다.
+2026-09-08 Windows 검증 기록: 차량·장치 어댑터·UART 테스트와 ARM GNU 15.2.1 펌웨어 빌드·링크를 확인했다. 실제 Linux evdev와 전기적 PWM·모터 동작은 Jetson/STM32 장비에서 별도로 검증한다.
 
 RX 버퍼는 수신 시각도 저장한다. watchdog은 메인에서 늦게 파싱한 시각이 아니라 유효 프레임의 마지막 바이트 수신 시각을 사용하며, 이미 만료한 버퍼 데이터는 폐기한다. 반전 대기는 실제 정지 적용 시각을 사용한다.
 

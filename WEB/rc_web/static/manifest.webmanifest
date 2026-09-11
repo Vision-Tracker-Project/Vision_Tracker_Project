@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Jetson RC 명령 확인",
-  "short_name": "Jetson RC",
+  "name": "Jetson Vision Tracker",
+  "short_name": "Vision Tracker",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
