@@ -37,35 +37,16 @@ class VisionService:
         from src.camera.camera_capture import CameraCapture
         from src.communication.uart_sender import UartSender
         from src.detection.person_detector import PersonDetector
-        from src.detection.yunet_detector import YuNetDetector
         from src.recognition.appearance_reid import AppearanceReIdentifier
-        from src.recognition.hybrid_reid import HybridReIdentifier
         from src.recognition.osnet_reid import OSNetReIdentifier
-        from src.recognition.sface_extractor import SFaceExtractor
         from src.tracking.person_tracker import PersonTracker
         from src.workers.video_worker import VideoWorker
         with self.control:
             if self.worker and self.worker.is_alive():
                 raise RuntimeError('카메라 OFF 후 모드를 변경하세요.')
-            if mode == 'ai':
-                body_reidentifier = OSNetReIdentifier(
-                    c.PERSON_REID_MODEL_PATH, c.PERSON_REID_HISTORY_SIZE
-                )
-                reidentifier = HybridReIdentifier(
-                    body_reidentifier,
-                    YuNetDetector(
-                        c.FACE_DETECTION_MODEL_PATH,
-                        score_threshold=c.FACE_DETECTION_SCORE_THRESHOLD,
-                        nms_threshold=c.FACE_DETECTION_NMS_THRESHOLD,
-                    ),
-                    SFaceExtractor(c.FACE_RECOGNITION_MODEL_PATH),
-                    history_size=c.FACE_REID_HISTORY_SIZE,
-                    face_threshold=c.FACE_REID_COSINE_THRESHOLD,
-                    face_interval=c.FACE_DETECTION_INTERVAL_SECONDS,
-                    minimum_face_size=c.FACE_REID_MINIMUM_SIZE,
-                )
-            else:
-                reidentifier = AppearanceReIdentifier()
+            reidentifier = (OSNetReIdentifier(c.PERSON_REID_MODEL_PATH,
+                                             c.PERSON_REID_HISTORY_SIZE)
+                            if mode == 'ai' else AppearanceReIdentifier())
             detector = PersonDetector(c.PERSON_MODEL_PATH, confidence=c.PERSON_CONFIDENCE,
                                       image_size=c.PERSON_IMAGE_SIZE,
                                       device=c.PERSON_DEVICE) if mode == 'ai' else None

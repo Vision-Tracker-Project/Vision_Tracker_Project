@@ -22,14 +22,6 @@ class PersonTrackingResult:
     similarity: Optional[float]
 
 
-@dataclass(frozen=True)
-class _ReIDDecision:
-    score: float
-    accepted: bool
-    source: str
-    priority: int = 1
-
-
 class PersonTracker:
     def __init__(self, reidentifier, pan_initial=90, tilt_initial=90,
                  pan_range=(0, 180), tilt_range=(0, 180), filter_alpha=0.25,
@@ -86,7 +78,6 @@ class PersonTracker:
         self.state = "선택 대기"
         self.best_candidate_id = None
         self.best_similarity = None
-        self.best_reid_source = None
 
     @property
     def selected_id(self):
@@ -136,7 +127,6 @@ class PersonTracker:
             self.state = "선택 대기"
             self.best_candidate_id = None
             self.best_similarity = None
-            self.best_reid_source = None
 
     def reset_target(self):
         self._reset_motion()
@@ -163,49 +153,36 @@ class PersonTracker:
                 self._next_reid = 0.0
                 self._was_lost = True
             comparison_due = now >= self._next_reid
-            if hasattr(self.reidentifier, "prepare"):
-                self.reidentifier.prepare(
-                    frame, detections, self._selected_id, now=now, force=comparison_due
-                )
-            matches = {}
             if comparison_due:
                 candidates = [target] if target is not None else detections
                 descriptors = {p.track_id: self.reidentifier.extract(frame, p)
                                for p in candidates if p.track_id >= 0}
                 self._next_reid = now + self._reid_interval
                 for person in candidates:
-                    decision = self._match_descriptor(descriptors.get(person.track_id))
-                    matches[person.track_id] = decision
-                    person.reid_similarity = None if decision is None else decision.score
+                    person.reid_similarity = self.reidentifier.similarity(descriptors.get(person.track_id))
             tracking_state = "추적 중"
             if target is None:
                 ranked = sorted(
-                    ((decision.priority, decision.score, item, decision)
-                     for item in detections
-                     if (decision := matches.get(item.track_id)) is not None
-                     and decision.accepted),
-                    key=lambda candidate: (candidate[0], candidate[1]), reverse=True,
+                    ((item.reid_similarity, item) for item in detections
+                     if item.reid_similarity is not None),
+                    key=lambda pair: pair[0], reverse=True,
                 )
-                self.best_similarity = ranked[0][1] if ranked else None
-                self.best_candidate_id = ranked[0][2].track_id if ranked else None
-                self.best_reid_source = ranked[0][3].source if ranked else None
-                second = next(
-                    (candidate[1] for candidate in ranked[1:]
-                     if candidate[0] == ranked[0][0]), 0.0
-                ) if ranked else 0.0
+                self.best_similarity = ranked[0][0] if ranked else None
+                self.best_candidate_id = ranked[0][1].track_id if ranked else None
+                second = ranked[1][0] if len(ranked) > 1 else 0.0
                 within_timeout = self._last_seen is not None and now - self._last_seen <= self._lost_timeout
-                if (within_timeout and ranked
-                        and ranked[0][1] - second >= self._reid_margin):
-                    candidate_id = ranked[0][2].track_id
+                if (within_timeout and ranked and ranked[0][0] >= self._reid_threshold
+                        and ranked[0][0] - second >= self._reid_margin):
+                    candidate_id = ranked[0][1].track_id
                     self._pending_count = self._pending_count + 1 if self._pending_id == candidate_id else 1
                     self._pending_id = candidate_id
                     if self._pending_count < self._reid_confirm_samples:
                         self.state = "재식별 확인 중"
                         self._reset_motion()
                         return None
-                    target = ranked[0][2]
+                    target = ranked[0][1]
                     self._selected_id = target.track_id
-                    tracking_state = f"{ranked[0][3].source} ReID 재연결"
+                    tracking_state = "ReID 재연결"
                     self._reset_motion(target.box)
                 else:
                     if comparison_due:
@@ -216,8 +193,7 @@ class PersonTracker:
                     return None
 
             descriptor = descriptors.get(target.track_id)
-            decision = matches.get(target.track_id) or self._match_descriptor(descriptor)
-            similarity = None if decision is None else decision.score
+            similarity = self.reidentifier.similarity(descriptor)
             self.reidentifier.remember(descriptor)
             self._was_lost = False
             self._pending_id = None
@@ -226,7 +202,6 @@ class PersonTracker:
             self._last_seen = now
             self.best_candidate_id = target.track_id
             self.best_similarity = similarity
-            self.best_reid_source = None if decision is None else decision.source
             self.state = tracking_state
 
             self._box_history.append(tuple(target.box))
@@ -236,15 +211,6 @@ class PersonTracker:
             estimated_head_y = float(y + height * self._head_box_ratio)
             measured = (float(x + width / 2.0), estimated_head_y)
             aim_source = "박스 추정 얼굴"
-            aim_low, aim_high = float(x), float(x + width)
-            if hasattr(self.reidentifier, "face_box_for"):
-                face_box = self.reidentifier.face_box_for(target, now=now)
-                if face_box is not None:
-                    face_x, face_y, face_width, face_height = face_box
-                    measured = (face_x + face_width / 2, face_y + face_height / 2)
-                    estimated_head_y = measured[1]
-                    aim_low, aim_high = face_x, face_x + face_width
-                    aim_source = "YuNet 실제 얼굴"
             if self._filtered_center is None:
                 filtered = measured
             else:
@@ -256,7 +222,7 @@ class PersonTracker:
             frame_width, frame_height = frame_size
             if move_servos:
                 error_x = self._boundary_error(
-                    0, aim_low, aim_high, frame_width, self._pan_margins, now
+                    0, x, x + width, frame_width, self._pan_margins, now
                 )
                 error_y = self._boundary_error(
                     1, estimated_head_y, estimated_head_y, frame_height,
@@ -274,18 +240,6 @@ class PersonTracker:
                 self._tilt = self._next_angle(self._tilt, error_y, self._tilt_sign, self._tilt_min, self._tilt_max)
             return PersonTrackingResult(filtered, *self.angles, self.angles != previous,
                                         target, aim_source, tracking_state, similarity)
-
-    def _match_descriptor(self, descriptor):
-        if descriptor is None:
-            return None
-        if hasattr(self.reidentifier, "match"):
-            return self.reidentifier.match(
-                descriptor, body_threshold=self._reid_threshold
-            )
-        score = self.reidentifier.similarity(descriptor)
-        if score is None:
-            return None
-        return _ReIDDecision(score, score >= self._reid_threshold, "전신")
 
     def _next_angle(self, angle, error, direction, minimum, maximum):
         if error == 0.0:
@@ -382,9 +336,8 @@ class PersonTracker:
             return min(0.0, (low - release_low) / half_extent)
         return max(0.0, (high - release_high) / half_extent)
 
-    def draw(self, frame, result):
-        if hasattr(self.reidentifier, "draw"):
-            self.reidentifier.draw(frame)
+    @staticmethod
+    def draw(frame, result):
         if result is not None:
             cv2.drawMarker(frame, tuple(round(v) for v in result.center), (0, 0, 255),
                            cv2.MARKER_CROSS, 20, 2, cv2.LINE_AA)
@@ -400,8 +353,6 @@ class PersonTracker:
                 "reid_profile_samples": self.reidentifier.samples,
                 "reid_similarity": self.best_similarity,
                 "reid_candidate_id": self.best_candidate_id,
-                "reid_source": self.best_reid_source,
-                "face_reid_profile_samples": getattr(self.reidentifier, "face_samples", 0),
                 "reid_threshold": self._reid_threshold,
                 "reid_ms": self.reidentifier.elapsed_ms,
             }

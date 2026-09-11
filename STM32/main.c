@@ -13,8 +13,9 @@ void Main(void)
     /* One USART2 receive path parses both the 6-byte servo frames and the
        8-byte vehicle frames. */
     Uart2_Init(115200);
-    Uart2_RX_Interrupt_Enable(1);
 
+    Uart2_RX_Interrupt_Enable(1);
+    
     for (;;)
     {
         Vehicle_HW_Poll();

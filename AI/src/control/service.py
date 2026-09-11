@@ -4,7 +4,9 @@ import threading
 import time
 
 from src.communication.uart_sender import UartSender
+from src.communication.protocol import build_servo_packet
 from src.communication.vehicle_protocol import build_vehicle_packet
+from src.config import PAN_INITIAL_ANGLE, PAN_TARGET_ID, TILT_INITIAL_ANGLE, TILT_TARGET_ID
 from src.control.state import Controller
 
 LOG = logging.getLogger(__name__)
@@ -72,6 +74,20 @@ class ControlService:
         if self.sender:
             self.sender.send((packet,))
 
+    def initialize_servos(self):
+        packets = (
+            build_servo_packet(PAN_TARGET_ID, PAN_INITIAL_ANGLE),
+            build_servo_packet(TILT_TARGET_ID, TILT_INITIAL_ANGLE),
+        )
+        self.sender.send(packets)
+        LOG.info(
+            "servo initialized pan=%d tilt=%d packets=%s / %s",
+            PAN_INITIAL_ANGLE,
+            TILT_INITIAL_ANGLE,
+            packets[0].hex_string,
+            packets[1].hex_string,
+        )
+
     def tick(self):
         now = self.clock()
         if self.last_tick is not None and now - self.last_tick > 0.15:
@@ -84,6 +100,7 @@ class ControlService:
             self.retry_uart = now + 1
             self.sender.open()
             self.transmit((0, 0))
+            self.initialize_servos()
             return
         self.transmit(self.controller.output())
         with self.lock:

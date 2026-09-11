@@ -131,11 +131,27 @@ class InputTest(unittest.TestCase):
         c=enabled(); axes(c,0,-1)
         service=ControlService(controller=c,sender=sender,clock=lambda:2)
         service.tick()
-        self.assertEqual(bytes(fake.written),build_vehicle_packet(0,0).data)
+        initial = (build_vehicle_packet(0,0).data
+                   + build_servo_packet(1,90).data
+                   + build_servo_packet(2,27).data)
+        self.assertEqual(bytes(fake.written), initial)
         service.mailbox.send((build_servo_packet(1,90),))
         service.tick()
         self.assertEqual(bytes(fake.written[-6:]),build_servo_packet(1,90).data)
         self.assertEqual(c.output(),(0,0))
+
+    def test_uart_connection_initializes_pan_and_tilt_once(self):
+        fake=FakeSerial()
+        sender=UartSender("fake",serial_factory=lambda **_:fake)
+        service=ControlService(sender=sender,clock=lambda:2)
+
+        service.tick()
+        expected_servos = (build_servo_packet(1,90).data
+                           + build_servo_packet(2,27).data)
+        self.assertEqual(bytes(fake.written[8:]), expected_servos)
+
+        service.tick()
+        self.assertEqual(bytes(fake.written).count(expected_servos), 1)
 
     def test_exception_and_shutdown_send_zero(self):
         fake=FakeSerial(); sender=UartSender("fake",serial_factory=lambda **_:fake); sender.open()
