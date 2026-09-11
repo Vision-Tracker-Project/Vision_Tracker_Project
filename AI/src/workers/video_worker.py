@@ -225,4 +225,6 @@ class VideoWorker(threading.Thread):
             self.camera.release()
             if self.detector is not None and hasattr(self.detector, "close"):
                 self.detector.close()
+            if self.tracker is not None and hasattr(self.tracker, "close"):
+                self.tracker.close()
             self.capture_stopped.emit()

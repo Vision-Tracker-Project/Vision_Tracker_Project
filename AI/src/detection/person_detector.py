@@ -1,4 +1,4 @@
-"""YOLO 사람 검출과 ByteTrack 기반 다중 인물 추적."""
+"""YOLO 사람 검출과 BoT-SORT 기반 다중 인물 추적."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,22 +135,25 @@ class PersonDetection:
 
 
 class PersonDetector:
-    """한 프레임씩 COCO class 0(person)만 검출하며 ByteTrack 상태를 유지한다."""
+    """한 프레임씩 COCO class 0(person)만 검출하며 BoT-SORT 상태를 유지한다."""
 
     def __init__(self, model_path, confidence=0.35, image_size=640,
-                 device="cpu", tracker="bytetrack.yaml"):
+                 device="cpu", tracker=None):
+        tracker = tracker or str(Path(__file__).with_name("botsort.yaml"))
         path = Path(model_path)
         if not path.is_file():
             raise PersonDetectorError(f"사람 검출 모델 파일을 찾을 수 없습니다: {path}")
         self._tensorrt = path.suffix == ".engine"
         try:
             if self._tensorrt:
-                from ultralytics.trackers.byte_tracker import BYTETracker
+                from ultralytics.trackers.bot_sort import BOTSORT
                 self.model = _TensorRTDetectorBackend(path)
-                self.byte_tracker = BYTETracker(SimpleNamespace(
+                self.byte_tracker = BOTSORT(SimpleNamespace(
                     track_high_thresh=0.25, track_low_thresh=0.1,
                     new_track_thresh=0.25, track_buffer=30,
                     match_thresh=0.8, fuse_score=True,
+                    gmc_method="sparseOptFlow", with_reid=False,
+                    proximity_thresh=0.5, appearance_thresh=0.8, model="auto",
                 ))
             else:
                 from ultralytics import YOLO
@@ -218,7 +221,7 @@ class PersonDetector:
         accepted = scores >= self.confidence
         prediction, scores = prediction[accepted], scores[accepted]
         if not len(prediction):
-            self.byte_tracker.update(_NumpyBoxes([], []))
+            self.byte_tracker.update(_NumpyBoxes([], []), frame)
             return []
 
         xywh = prediction[:, :4]
@@ -231,7 +234,7 @@ class PersonDetector:
         boxes[:, [0, 2]] = boxes[:, [0, 2]].clip(0, frame_width-1)
         boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, frame_height-1)
 
-        tracks = self.byte_tracker.update(_NumpyBoxes(boxes, scores))
+        tracks = self.byte_tracker.update(_NumpyBoxes(boxes, scores), frame)
         return [PersonDetection(
             track_id=int(track[4]),
             box=(round(track[0]), round(track[1]),

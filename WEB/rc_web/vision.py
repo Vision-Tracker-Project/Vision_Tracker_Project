@@ -38,15 +38,20 @@ class VisionService:
         from src.communication.uart_sender import UartSender
         from src.detection.person_detector import PersonDetector
         from src.recognition.appearance_reid import AppearanceReIdentifier
+        from src.recognition.osnet_reid import OSNetReIdentifier
         from src.tracking.person_tracker import PersonTracker
         from src.workers.video_worker import VideoWorker
         with self.control:
             if self.worker and self.worker.is_alive():
                 raise RuntimeError('카메라 OFF 후 모드를 변경하세요.')
+            reidentifier = (OSNetReIdentifier(c.PERSON_REID_MODEL_PATH,
+                                             c.PERSON_REID_HISTORY_SIZE)
+                            if mode == 'ai' else AppearanceReIdentifier())
             detector = PersonDetector(c.PERSON_MODEL_PATH, confidence=c.PERSON_CONFIDENCE,
                                       image_size=c.PERSON_IMAGE_SIZE,
                                       device=c.PERSON_DEVICE) if mode == 'ai' else None
-            tracker = PersonTracker(AppearanceReIdentifier(),
+            tracker = PersonTracker(reidentifier,
+                reid_interval=c.PERSON_REID_INTERVAL_SECONDS,
                 pan_initial=c.PAN_INITIAL_ANGLE, tilt_initial=c.TILT_INITIAL_ANGLE,
                 pan_range=(c.PAN_MIN_ANGLE, c.PAN_MAX_ANGLE), tilt_range=(c.TILT_MIN_ANGLE, c.TILT_MAX_ANGLE),
                 filter_alpha=c.TRACKING_FILTER_ALPHA,
