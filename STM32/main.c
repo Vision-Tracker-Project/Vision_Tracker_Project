@@ -4,6 +4,9 @@
 void Main(void)
 {
     SCB->CPACR |= (0x3 << 10*2) | (0x3 << 11*2);
+
+    /* Keep servo inputs quiet while the system clock and TIM2 are configured. */
+    TIM2_Servo_Pins_Hold_Low();
     Clock_Init();
 
     /* TIM2 owns the independent pan/tilt outputs; TIM3 owns both drive PWMs. */

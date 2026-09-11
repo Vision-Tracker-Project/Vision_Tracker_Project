@@ -24,6 +24,7 @@ extern void LED_Init(void);
 /* TIM2 pan/tilt servo */
 extern void TIM2_Servo_Set_Pan_Angle(unsigned int angle);
 extern void TIM2_Servo_Set_Tilt_Angle(unsigned int angle);
+extern void TIM2_Servo_Pins_Hold_Low(void);
 extern void TIM2_Servo_Init(void);
 extern void TIM2_Servo_Set_Pan_Pulse(unsigned int pulse_us);
 extern void TIM2_Servo_Set_Tilt_Pulse(unsigned int pulse_us);
