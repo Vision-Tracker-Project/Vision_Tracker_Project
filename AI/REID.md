@@ -5,10 +5,14 @@ flow camera motion compensation. Its internal appearance encoder is disabled;
 OSNet handles selected-person long-term recovery separately. The short-term
 buffer is 30 tracker updates, not a guaranteed number of wall-clock seconds.
 
-OSNet runs only after selection: one target crop every 0.5 seconds while tracked,
-and visible tracked candidates every 0.5 seconds while lost. Ten normalized
-512D float32 vectors are kept (20 KiB of vector storage, excluding model/runtime).
-No image gallery is retained. Candidate count and inference time still affect latency.
+OSNet runs only after selection: one target crop every 0.5 seconds while tracked.
+While the target is lost, candidates are processed as a time-sliced sweep: by default
+one candidate every 0.1 seconds instead of every candidate in one video frame. Sweep
+results are cached only until all currently visible candidates have been compared,
+then ranking and confirmation are performed. Ten normalized 512D float32 target
+vectors are kept (20 KiB of target gallery storage, excluding model/runtime). No image
+gallery is retained. This bounds a video-loop stall to one OSNet inference regardless
+of how many people are visible.
 The TensorRT FP16 engine is preferred when present; OpenCV DNN CPU runs as the ONNX fallback.
 
 Recovery requires cosine similarity >= 0.85, a >= 0.06 lead over the runner-up,
@@ -48,7 +52,9 @@ If `models/osnet_x0_25.engine` exists it is selected automatically. Set
 `VISION_REID_MODEL` only when an explicit engine or ONNX path is required.
 
 Environment overrides: `VISION_REID_MODEL` (absolute TensorRT engine or ONNX path),
-`VISION_REID_TIMEOUT` (seconds), `VISION_REID_THRESHOLD` (cosine threshold).
+`VISION_REID_TIMEOUT` (seconds), `VISION_REID_THRESHOLD` (cosine threshold),
+`VISION_REID_LOST_INTERVAL` (seconds between lost-target candidate steps), and
+`VISION_REID_CANDIDATES_PER_STEP` (maximum OSNet candidates in one video loop).
 For autostart, set overrides in the service environment, not just an interactive shell.
 Once the model is installed, restart the existing vision-tracker-web service.
 

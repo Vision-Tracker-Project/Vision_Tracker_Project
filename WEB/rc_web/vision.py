@@ -52,6 +52,8 @@ class VisionService:
                                       device=c.PERSON_DEVICE) if mode == 'ai' else None
             tracker = PersonTracker(reidentifier,
                 reid_interval=c.PERSON_REID_INTERVAL_SECONDS,
+                lost_reid_interval=c.PERSON_REID_LOST_INTERVAL_SECONDS,
+                reid_candidates_per_step=c.PERSON_REID_CANDIDATES_PER_STEP,
                 pan_initial=c.PAN_INITIAL_ANGLE, tilt_initial=c.TILT_INITIAL_ANGLE,
                 pan_range=(c.PAN_MIN_ANGLE, c.PAN_MAX_ANGLE), tilt_range=(c.TILT_MIN_ANGLE, c.TILT_MAX_ANGLE),
                 filter_alpha=c.TRACKING_FILTER_ALPHA,

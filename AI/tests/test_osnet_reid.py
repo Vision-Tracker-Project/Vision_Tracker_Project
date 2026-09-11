@@ -64,3 +64,29 @@ class OSNetTest(unittest.TestCase):
         for _ in range(3):
             self.assertIsNone(tracker.update([p(2), p(3)], frame, (40, 80)))
         self.assertEqual(tracker.selected_id, 1)
+
+    @patch('src.tracking.person_tracker.time.monotonic')
+    def test_lost_candidates_are_spread_across_updates(self, clock):
+        clock.return_value = 100.0
+        reid = self.make_reid()
+        tracker = PersonTracker(
+            reid, lost_timeout=60, reid_interval=0,
+            lost_reid_interval=0, reid_candidates_per_step=1,
+        )
+        frame = np.zeros((80, 120, 3), np.uint8)
+        original = PersonDetection(1, (0, 0, 40, 80), 0.9)
+        candidates = [
+            PersonDetection(2, (0, 0, 40, 80), 0.9),
+            PersonDetection(3, (40, 0, 40, 80), 0.8),
+            PersonDetection(4, (80, 0, 40, 80), 0.7),
+        ]
+        tracker.update([original], frame, (120, 80))
+        tracker.select_at(0.1, 0.5)
+        tracker.update([original], frame, (120, 80))
+        baseline = reid.net.forward.call_count
+
+        for expected in range(1, 4):
+            self.assertIsNone(tracker.update(candidates, frame, (120, 80)))
+            self.assertEqual(reid.net.forward.call_count - baseline, expected)
+
+        self.assertEqual(tracker.state, "대상 유실")

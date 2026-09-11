@@ -34,7 +34,8 @@ class PersonTracker:
                  pan_start_margin=0.15, pan_release_margin=0.25,
                  head_box_ratio=0.10, head_start_band=(0.22, 0.42),
                  head_release_band=(0.28, 0.36),
-                 reid_interval=0.5, reid_confirm_samples=2):
+                 reid_interval=0.5, lost_reid_interval=0.1,
+                 reid_candidates_per_step=1, reid_confirm_samples=2):
         self.reidentifier = reidentifier
         self._pan_min, self._pan_max = pan_range
         self._tilt_min, self._tilt_max = tilt_range
@@ -49,8 +50,12 @@ class PersonTracker:
         self._reid_margin = reid_margin
         self._lost_timeout = lost_timeout
         self._reid_interval = max(0.0, reid_interval)
+        self._lost_reid_interval = max(0.0, lost_reid_interval)
+        self._reid_candidates_per_step = max(1, int(reid_candidates_per_step))
         self._reid_confirm_samples = max(1, reid_confirm_samples)
         self._next_reid = 0.0
+        self._scan_queue = []
+        self._scan_results = {}
         self._pending_id = None
         self._pending_count = 0
         self._was_lost = False
@@ -108,6 +113,7 @@ class PersonTracker:
             self._last_seen = time.monotonic()
             self.reidentifier.clear()
             self._next_reid = 0.0
+            self._reset_reid_scan()
             self._pending_id = None
             self._pending_count = 0
             self._was_lost = False
@@ -121,6 +127,7 @@ class PersonTracker:
             self._last_seen = None
             self.reidentifier.clear()
             self._next_reid = 0.0
+            self._reset_reid_scan()
             self._pending_id = None
             self._pending_count = 0
             self._was_lost = False
@@ -151,17 +158,32 @@ class PersonTracker:
             descriptors = {}
             if target is None and not self._was_lost:
                 self._next_reid = 0.0
+                self._reset_reid_scan()
                 self._was_lost = True
             comparison_due = now >= self._next_reid
             if comparison_due:
-                candidates = [target] if target is not None else detections
-                descriptors = {p.track_id: self.reidentifier.extract(frame, p)
-                               for p in candidates if p.track_id >= 0}
-                self._next_reid = now + self._reid_interval
-                for person in candidates:
-                    person.reid_similarity = self.reidentifier.similarity(descriptors.get(person.track_id))
+                if target is not None:
+                    descriptors[target.track_id] = self.reidentifier.extract(frame, target)
+                    target.reid_similarity = self.reidentifier.similarity(
+                        descriptors[target.track_id]
+                    )
+                    self._next_reid = now + self._reid_interval
+                else:
+                    comparison_due, descriptors = self._scan_lost_candidates(
+                        detections, frame
+                    )
+                    self._next_reid = now + self._lost_reid_interval
+            if target is None:
+                for person in detections:
+                    result = self._scan_results.get(person.track_id)
+                    if result is not None:
+                        person.reid_similarity = result[0]
             tracking_state = "추적 중"
             if target is None:
+                if not comparison_due:
+                    self.state = "재식별 검색 중" if detections else "대상 유실"
+                    self._reset_motion()
+                    return None
                 ranked = sorted(
                     ((item.reid_similarity, item) for item in detections
                      if item.reid_similarity is not None),
@@ -179,6 +201,9 @@ class PersonTracker:
                     if self._pending_count < self._reid_confirm_samples:
                         self.state = "재식별 확인 중"
                         self._reset_motion()
+                        # Confirmation must use a fresh sweep, not the same
+                        # cached descriptor a second time.
+                        self._reset_reid_scan()
                         return None
                     target = ranked[0][1]
                     self._selected_id = target.track_id
@@ -190,11 +215,16 @@ class PersonTracker:
                         self._pending_count = 0
                     self.state = "대상 유실"
                     self._reset_motion()
+                    self._reset_reid_scan()
                     return None
 
             descriptor = descriptors.get(target.track_id)
+            if descriptor is None:
+                cached = self._scan_results.get(target.track_id)
+                descriptor = None if cached is None else cached[1]
             similarity = self.reidentifier.similarity(descriptor)
             self.reidentifier.remember(descriptor)
+            self._reset_reid_scan()
             self._was_lost = False
             self._pending_id = None
             self._pending_count = 0
@@ -240,6 +270,44 @@ class PersonTracker:
                 self._tilt = self._next_angle(self._tilt, error_y, self._tilt_sign, self._tilt_min, self._tilt_max)
             return PersonTrackingResult(filtered, *self.angles, self.angles != previous,
                                         target, aim_source, tracking_state, similarity)
+
+    def _scan_lost_candidates(self, detections, frame):
+        """Run a bounded part of one fair ReID sweep and cache its results."""
+        visible = {person.track_id: person for person in detections if person.track_id >= 0}
+        if not visible:
+            self._reset_reid_scan()
+            return False, {}
+
+        self._scan_queue = [track_id for track_id in self._scan_queue if track_id in visible]
+        self._scan_results = {
+            track_id: result for track_id, result in self._scan_results.items()
+            if track_id in visible
+        }
+        queued = set(self._scan_queue)
+        unseen = [person for track_id, person in visible.items()
+                  if track_id not in queued and track_id not in self._scan_results]
+        unseen.sort(key=lambda person: (
+            -person.confidence,
+            -(person.box[2] * person.box[3]),
+            person.track_id,
+        ))
+        self._scan_queue.extend(person.track_id for person in unseen)
+
+        descriptors = {}
+        for _ in range(min(self._reid_candidates_per_step, len(self._scan_queue))):
+            track_id = self._scan_queue.pop(0)
+            person = visible[track_id]
+            descriptor = self.reidentifier.extract(frame, person)
+            score = self.reidentifier.similarity(descriptor)
+            descriptors[track_id] = descriptor
+            self._scan_results[track_id] = (score, descriptor)
+
+        complete = not self._scan_queue
+        return complete, descriptors
+
+    def _reset_reid_scan(self):
+        self._scan_queue.clear()
+        self._scan_results.clear()
 
     def _next_angle(self, angle, error, direction, minimum, maximum):
         if error == 0.0:
