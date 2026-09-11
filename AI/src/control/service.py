@@ -107,6 +107,7 @@ class ControlService:
             servo, self.servo = self.servo, ()
         if self.sender and servo:
             self.sender.send(servo)
+            LOG.info("servo tx %s", " / ".join(packet.hex_string for packet in servo))
 
     def run(self):
         try:
