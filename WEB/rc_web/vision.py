@@ -66,6 +66,11 @@ class VisionService:
                 head_box_ratio=c.TRACKING_HEAD_BOX_RATIO,
                 head_start_band=(c.TRACKING_HEAD_START_TOP, c.TRACKING_HEAD_START_BOTTOM),
                 head_release_band=(c.TRACKING_HEAD_RELEASE_TOP, c.TRACKING_HEAD_RELEASE_BOTTOM),
+                predictive_pan_duration=c.TRACKING_PREDICTIVE_PAN_DURATION_SECONDS,
+                predictive_pan_max_degrees=c.TRACKING_PREDICTIVE_PAN_MAX_DEGREES,
+                predictive_pan_min_speed=c.TRACKING_PREDICTIVE_PAN_MIN_SPEED_PER_SECOND,
+                predictive_pan_edge_margin=c.TRACKING_PREDICTIVE_PAN_EDGE_MARGIN,
+                predictive_motion_window=c.TRACKING_PREDICTIVE_MOTION_WINDOW_SECONDS,
                 pan_inverted=c.PAN_INVERTED, tilt_inverted=c.TILT_INVERTED,
                 reid_threshold=c.PERSON_REID_THRESHOLD, reid_margin=c.PERSON_REID_MARGIN,
                 lost_timeout=c.PERSON_LOST_TIMEOUT_SECONDS)

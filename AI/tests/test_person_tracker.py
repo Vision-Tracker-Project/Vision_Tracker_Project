@@ -99,6 +99,53 @@ class PersonTrackerTest(unittest.TestCase):
         )
         self.assertLess(tracker.angles[0], 90)
 
+    def test_fast_edge_exit_predicts_pan_then_stops(self):
+        now = [0.0]
+        tracker = PersonTracker(
+            AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,
+            pan_inverted=False, boundary_confirm_frames=1, box_history_size=1,
+            predictive_pan_duration=0.8, predictive_pan_max_degrees=15,
+            predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
+            predictive_motion_window=0.35, clock=lambda: now[0],
+        )
+        tracker.update([person(3, (40, 20, 40, 80))], self.frame, (160, 120),
+                       move_servos=False)
+        tracker.select_at(0.4, 0.5)
+        for timestamp, x in ((0.1, 50), (0.2, 80), (0.3, 110)):
+            now[0] = timestamp
+            tracker.update([person(3, (x, 20, 40, 80))], self.frame, (160, 120))
+
+        pan_before_loss = tracker.angles[0]
+        now[0] = 0.4
+        started = tracker.update([], self.frame, (160, 120))
+        self.assertEqual((started.state, started.aim_source), ("이동 예측 중", "이동 예측"))
+
+        now[0] = 0.8
+        moving = tracker.update([], self.frame, (160, 120))
+        self.assertGreater(moving.pan_angle, pan_before_loss)
+        self.assertEqual(moving.tilt_angle, 90)
+
+        now[0] = 1.3
+        self.assertIsNone(tracker.update([], self.frame, (160, 120)))
+        self.assertEqual(tracker.state, "대상 유실")
+
+    def test_exit_away_from_edge_does_not_predict_pan(self):
+        now = [0.0]
+        tracker = PersonTracker(
+            AppearanceReIdentifier(), pan_inverted=False,
+            predictive_pan_min_speed=0.1, predictive_pan_edge_margin=0.15,
+            predictive_motion_window=0.35, clock=lambda: now[0],
+        )
+        tracker.update([person(3, (10, 20, 40, 80))], self.frame, (160, 120),
+                       move_servos=False)
+        tracker.select_at(0.2, 0.5)
+        for timestamp, x in ((0.1, 15), (0.2, 25), (0.3, 35)):
+            now[0] = timestamp
+            tracker.update([person(3, (x, 20, 40, 80))], self.frame, (160, 120))
+        now[0] = 0.4
+        self.assertIsNone(tracker.update([], self.frame, (160, 120)))
+        self.assertEqual(tracker.state, "대상 유실")
+
     def test_tilt_uses_estimated_head_instead_of_full_body_center(self):
         tracker = PersonTracker(
             AppearanceReIdentifier(), pan_initial=90, tilt_initial=90,

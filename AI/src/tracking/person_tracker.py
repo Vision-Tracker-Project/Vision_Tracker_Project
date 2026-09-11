@@ -22,6 +22,16 @@ class PersonTrackingResult:
     similarity: Optional[float]
 
 
+@dataclass(frozen=True)
+class _PanPrediction:
+    started_at: float
+    start_angle: float
+    direction: int
+    center: Tuple[float, float]
+    velocity_x: float
+    target: object
+
+
 class PersonTracker:
     def __init__(self, reidentifier, pan_initial=90, tilt_initial=90,
                  pan_range=(0, 180), tilt_range=(0, 180), filter_alpha=0.25,
@@ -34,7 +44,10 @@ class PersonTracker:
                  pan_start_margin=0.15, pan_release_margin=0.25,
                  head_box_ratio=0.10, head_start_band=(0.22, 0.42),
                  head_release_band=(0.28, 0.36),
-                 reid_interval=0.5, reid_confirm_samples=2):
+                 reid_interval=0.5, reid_confirm_samples=2,
+                 predictive_pan_duration=0.8, predictive_pan_max_degrees=15.0,
+                 predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
+                 predictive_motion_window=0.35, clock=None):
         self.reidentifier = reidentifier
         self._pan_min, self._pan_max = pan_range
         self._tilt_min, self._tilt_max = tilt_range
@@ -66,6 +79,16 @@ class PersonTracker:
         if not 0.0 <= self._head_box_ratio <= 0.5:
             raise ValueError("얼굴 추정 위치는 인물 박스 높이의 0~0.5 범위여야 합니다.")
         self._head_bands = self._validate_head_bands(head_start_band, head_release_band)
+        self._predictive_pan_duration = max(0.0, float(predictive_pan_duration))
+        self._predictive_pan_max_degrees = max(0.0, float(predictive_pan_max_degrees))
+        self._predictive_pan_min_speed = max(0.0, float(predictive_pan_min_speed))
+        self._predictive_pan_edge_margin = float(predictive_pan_edge_margin)
+        if not 0.0 <= self._predictive_pan_edge_margin < 0.5:
+            raise ValueError("이동 예측 화면 경계는 0~0.5 범위여야 합니다.")
+        self._predictive_motion_window = max(0.1, float(predictive_motion_window))
+        self._clock = clock or time.monotonic
+        self._motion_history = deque(maxlen=12)
+        self._pan_prediction = None
         self._axis_motion = [0, 0]
         self._axis_candidate = [0, 0]
         self._axis_candidate_count = [0, 0]
@@ -105,7 +128,8 @@ class PersonTracker:
             target = min(containing, key=lambda item: item.box[2] * item.box[3])
             self._selected_id = target.track_id
             self._reset_motion(target.box)
-            self._last_seen = time.monotonic()
+            self._last_seen = self._clock()
+            self._reset_prediction()
             self.reidentifier.clear()
             self._next_reid = 0.0
             self._pending_id = None
@@ -127,13 +151,15 @@ class PersonTracker:
             self.state = "선택 대기"
             self.best_candidate_id = None
             self.best_similarity = None
+            self._reset_prediction()
 
     def reset_target(self):
         self._reset_motion()
+        self._reset_prediction()
 
     def update(self, detections, frame, frame_size, move_servos=True,
                control_step_due=True):
-        now = time.monotonic()
+        now = self._clock()
         with self._lock:
             self._latest = [(person, frame_size) for person in detections]
             for person in detections:
@@ -152,6 +178,7 @@ class PersonTracker:
             if target is None and not self._was_lost:
                 self._next_reid = 0.0
                 self._was_lost = True
+                self._start_pan_prediction(now)
             comparison_due = now >= self._next_reid
             if comparison_due:
                 candidates = [target] if target is not None else detections
@@ -177,6 +204,12 @@ class PersonTracker:
                     self._pending_count = self._pending_count + 1 if self._pending_id == candidate_id else 1
                     self._pending_id = candidate_id
                     if self._pending_count < self._reid_confirm_samples:
+                        predicted = self._predict_pan(
+                            now, frame_size, move_servos, control_step_due,
+                            "재식별 확인 중 · 이동 예측",
+                        )
+                        if predicted is not None:
+                            return predicted
                         self.state = "재식별 확인 중"
                         self._reset_motion()
                         return None
@@ -184,14 +217,22 @@ class PersonTracker:
                     self._selected_id = target.track_id
                     tracking_state = "ReID 재연결"
                     self._reset_motion(target.box)
+                    self._reset_prediction()
                 else:
                     if comparison_due:
                         self._pending_id = None
                         self._pending_count = 0
+                    predicted = self._predict_pan(
+                        now, frame_size, move_servos, control_step_due, "이동 예측 중"
+                    )
+                    if predicted is not None:
+                        return predicted
                     self.state = "대상 유실"
                     self._reset_motion()
                     return None
 
+            if self._pan_prediction is not None:
+                self._reset_prediction()
             descriptor = descriptors.get(target.track_id)
             similarity = self.reidentifier.similarity(descriptor)
             self.reidentifier.remember(descriptor)
@@ -221,6 +262,10 @@ class PersonTracker:
             self._filtered_center = filtered
             frame_width, frame_height = frame_size
             if move_servos:
+                self._record_motion(now, measured, (x, x + width), frame_width, target)
+            else:
+                self._reset_prediction()
+            if move_servos:
                 error_x = self._boundary_error(
                     0, x, x + width, frame_width, self._pan_margins, now
                 )
@@ -240,6 +285,84 @@ class PersonTracker:
                 self._tilt = self._next_angle(self._tilt, error_y, self._tilt_sign, self._tilt_min, self._tilt_max)
             return PersonTrackingResult(filtered, *self.angles, self.angles != previous,
                                         target, aim_source, tracking_state, similarity)
+
+    def _record_motion(self, now, center, horizontal_bounds, frame_width, target):
+        self._motion_history.append((
+            now, center[0], center[1], horizontal_bounds[0], horizontal_bounds[1],
+            frame_width, target,
+        ))
+        cutoff = now - self._predictive_motion_window
+        while self._motion_history and self._motion_history[0][0] < cutoff:
+            self._motion_history.popleft()
+
+    def _start_pan_prediction(self, now):
+        self._pan_prediction = None
+        samples = [sample for sample in self._motion_history
+                   if sample[0] >= now - self._predictive_motion_window]
+        if (self._predictive_pan_duration <= 0 or self._predictive_pan_max_degrees <= 0
+                or len(samples) < 3):
+            return
+        elapsed = samples[-1][0] - samples[0][0]
+        if elapsed <= 0:
+            return
+        displacement = samples[-1][1] - samples[0][1]
+        direction = 1 if displacement > 0 else -1 if displacement < 0 else 0
+        frame_width = max(float(samples[-1][5]), 1.0)
+        speed = displacement / frame_width / elapsed
+        if direction == 0 or abs(speed) < self._predictive_pan_min_speed:
+            return
+        movements = [later[1] - earlier[1]
+                     for earlier, later in zip(samples, samples[1:])]
+        total_motion = sum(abs(value) for value in movements)
+        consistent_motion = sum(max(0.0, direction * value) for value in movements)
+        if total_motion <= 0 or consistent_motion / total_motion < 0.75:
+            return
+        _, center_x, center_y, left, right, _, target = samples[-1]
+        edge = frame_width * self._predictive_pan_edge_margin
+        if (direction < 0 and left > edge) or (direction > 0 and right < frame_width - edge):
+            return
+        self._pan_prediction = _PanPrediction(
+            now, self._pan, direction, (center_x, center_y),
+            speed * frame_width, target,
+        )
+
+    def _predict_pan(self, now, frame_size, move_servos, control_step_due, state):
+        prediction = self._pan_prediction
+        if prediction is None or not move_servos:
+            return None
+        elapsed = now - prediction.started_at
+        if elapsed > self._predictive_pan_duration:
+            self._reset_prediction()
+            return None
+        duration = max(self._predictive_pan_duration, 1e-6)
+        progress = float(np.clip(elapsed / duration, 0.0, 1.0))
+        # Ease-out 이동으로 시작은 빠르게, 종료 시점은 부드럽게 감속한다.
+        extra = self._predictive_pan_max_degrees * (1.0 - (1.0 - progress) ** 2)
+        desired_pan = float(np.clip(
+            prediction.start_angle + self._pan_sign * prediction.direction * extra,
+            self._pan_min, self._pan_max,
+        ))
+        previous = self.angles
+        if control_step_due:
+            delta = float(np.clip(
+                desired_pan - self._pan, -self._max_step, self._max_step
+            ))
+            self._pan = float(np.clip(self._pan + delta, self._pan_min, self._pan_max))
+        frame_width, frame_height = frame_size
+        predicted_center = (
+            float(np.clip(prediction.center[0] + prediction.velocity_x * elapsed,
+                          0, max(frame_width - 1, 0))),
+            float(np.clip(prediction.center[1], 0, max(frame_height - 1, 0))),
+        )
+        self.state = state
+        return PersonTrackingResult(
+            predicted_center, *self.angles, self.angles != previous,
+            prediction.target, "이동 예측", state, self.best_similarity,
+        )
+
+    def _reset_prediction(self):
+        self._pan_prediction = None
+        self._motion_history.clear()
 
     def _next_angle(self, angle, error, direction, minimum, maximum):
         if error == 0.0:
