@@ -72,7 +72,7 @@ class _TensorRTBackend:
 
 
 class OSNetReIdentifier:
-    method = "OSNet 512D / BoT-SORT"
+    method = "OSNet 512D 장기 ReID"
 
     def __init__(self, model_path, history_size=10):
         path = Path(model_path)

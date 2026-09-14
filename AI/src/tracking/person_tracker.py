@@ -9,6 +9,8 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
+from .identity_registry import IdentityRegistry
+
 
 @dataclass(frozen=True)
 class PersonTrackingResult:
@@ -45,6 +47,7 @@ class PersonTracker:
                  head_box_ratio=0.10, head_start_band=(0.22, 0.42),
                  head_release_band=(0.28, 0.36),
                  reid_interval=0.5, reid_confirm_samples=2,
+                 long_reid_delay=1.0,
                  predictive_pan_duration=0.8, predictive_pan_max_degrees=15.0,
                  predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
                  predictive_motion_window=0.35, clock=None):
@@ -63,6 +66,7 @@ class PersonTracker:
         self._lost_timeout = lost_timeout
         self._reid_interval = max(0.0, reid_interval)
         self._reid_confirm_samples = max(1, reid_confirm_samples)
+        self._long_reid_delay = max(0.0, float(long_reid_delay))
         self._next_reid = 0.0
         self._pending_id = None
         self._pending_count = 0
@@ -94,8 +98,11 @@ class PersonTracker:
         self._axis_candidate_count = [0, 0]
         self._axis_settle_until = [0.0, 0.0]
         self._filtered_center = None
+        self._identities = IdentityRegistry()
         self._selected_id = None
+        self._selected_tracker_id = None
         self._last_seen = None
+        self._lost_since = None
         self._latest = []
         self._lock = threading.RLock()
         self.state = "선택 대기"
@@ -127,8 +134,10 @@ class PersonTracker:
                 return None
             target = min(containing, key=lambda item: item.box[2] * item.box[3])
             self._selected_id = target.track_id
+            self._selected_tracker_id = target.tracker_id
             self._reset_motion(target.box)
             self._last_seen = self._clock()
+            self._lost_since = None
             self._reset_prediction()
             self.reidentifier.clear()
             self._next_reid = 0.0
@@ -141,8 +150,10 @@ class PersonTracker:
     def clear_selection(self):
         with self._lock:
             self._selected_id = None
+            self._selected_tracker_id = None
             self._reset_motion()
             self._last_seen = None
+            self._lost_since = None
             self.reidentifier.clear()
             self._next_reid = 0.0
             self._pending_id = None
@@ -161,6 +172,7 @@ class PersonTracker:
                control_step_due=True):
         now = self._clock()
         with self._lock:
+            self._identities.assign(detections)
             self._latest = [(person, frame_size) for person in detections]
             for person in detections:
                 person.reid_similarity = None
@@ -169,7 +181,8 @@ class PersonTracker:
                 self.state = "선택 대기"
                 return None
 
-            target = next((item for item in detections if item.track_id == self._selected_id), None)
+            target = next((item for item in detections
+                           if item.tracker_id == self._selected_tracker_id), None)
             if self._last_seen is not None and now - self._last_seen > self._lost_timeout:
                 self.clear_selection()
                 self.state = "재식별 시간 만료 · 다시 선택하세요"
@@ -177,16 +190,23 @@ class PersonTracker:
             descriptors = {}
             if target is None and not self._was_lost:
                 self._next_reid = 0.0
+                # Count the hand-off delay from the last confirmed sighting, not
+                # from whichever later frame first happens to observe the loss.
+                self._lost_since = self._last_seen if self._last_seen is not None else now
                 self._was_lost = True
                 self._start_pan_prediction(now)
-            comparison_due = now >= self._next_reid
+            long_reid_ready = (target is not None or self._lost_since is not None
+                               and now - self._lost_since >= self._long_reid_delay)
+            comparison_due = long_reid_ready and now >= self._next_reid
             if comparison_due:
                 candidates = [target] if target is not None else detections
-                descriptors = {p.track_id: self.reidentifier.extract(frame, p)
-                               for p in candidates if p.track_id >= 0}
+                descriptors = {p.tracker_id: self.reidentifier.extract(frame, p)
+                               for p in candidates if p.tracker_id >= 0}
                 self._next_reid = now + self._reid_interval
                 for person in candidates:
-                    person.reid_similarity = self.reidentifier.similarity(descriptors.get(person.track_id))
+                    person.reid_similarity = self.reidentifier.similarity(
+                        descriptors.get(person.tracker_id)
+                    )
             tracking_state = "추적 중"
             if target is None:
                 ranked = sorted(
@@ -200,7 +220,7 @@ class PersonTracker:
                 within_timeout = self._last_seen is not None and now - self._last_seen <= self._lost_timeout
                 if (within_timeout and ranked and ranked[0][0] >= self._reid_threshold
                         and ranked[0][0] - second >= self._reid_margin):
-                    candidate_id = ranked[0][1].track_id
+                    candidate_id = ranked[0][1].tracker_id
                     self._pending_count = self._pending_count + 1 if self._pending_id == candidate_id else 1
                     self._pending_id = candidate_id
                     if self._pending_count < self._reid_confirm_samples:
@@ -214,7 +234,9 @@ class PersonTracker:
                         self._reset_motion()
                         return None
                     target = ranked[0][1]
-                    self._selected_id = target.track_id
+                    self._identities.rebind(self._selected_id, target.tracker_id)
+                    self._selected_tracker_id = target.tracker_id
+                    target.track_id = self._selected_id
                     tracking_state = "ReID 재연결"
                     self._reset_motion(target.box)
                     self._reset_prediction()
@@ -233,10 +255,11 @@ class PersonTracker:
 
             if self._pan_prediction is not None:
                 self._reset_prediction()
-            descriptor = descriptors.get(target.track_id)
+            descriptor = descriptors.get(target.tracker_id)
             similarity = self.reidentifier.similarity(descriptor)
             self.reidentifier.remember(descriptor)
             self._was_lost = False
+            self._lost_since = None
             self._pending_id = None
             self._pending_count = 0
             target.reid_similarity = similarity
