@@ -13,7 +13,7 @@ class FakeReIdentifier:
     method = "test descriptor"
 
     def __init__(self):
-        self.gallery = deque(maxlen=10)
+        self.gallery = deque(maxlen=20)
         self.elapsed_ms = 0.0
 
     @property
@@ -126,6 +126,28 @@ class PersonTrackerTest(unittest.TestCase):
         self.assertEqual(tracker.state, "ID 교환 의심 · 재검색 중")
         self.assertEqual(len(reidentifier.gallery), 1)
         self.assertGreater(np.dot(reidentifier.gallery[0], identity_a), 0.99)
+
+    def test_clipped_and_heavily_overlapped_boxes_are_not_remembered(self):
+        reidentifier = FakeReIdentifier()
+        tracker = PersonTracker(
+            reidentifier, reid_interval=0, gallery_overlap_threshold=0.5
+        )
+        clipped = person(1, (0, 10, 40, 80))
+        tracker.update([clipped], self.frame, (160, 120), move_servos=False)
+        tracker.select_at(0.1, 0.3)
+        tracker.update([clipped], self.frame, (160, 120), move_servos=False)
+        self.assertEqual(len(reidentifier.gallery), 0)
+
+        target = person(1, (10, 10, 40, 80))
+        overlapping = person(2, (20, 20, 40, 80))
+        tracker.update(
+            [target, overlapping], self.frame, (160, 120), move_servos=False
+        )
+        self.assertEqual(len(reidentifier.gallery), 0)
+
+        separated = person(2, (90, 20, 40, 80))
+        tracker.update([target, separated], self.frame, (160, 120), move_servos=False)
+        self.assertEqual(len(reidentifier.gallery), 1)
 
     def test_blank_point_clears_selection(self):
         detections = [person(3)]

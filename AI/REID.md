@@ -17,7 +17,8 @@ BoT-SORT 원본 ID와 외부에 표시하는 영구 ID는 분리합니다. OSNet
 - 엔진: `models/osnet_x0_25.engine` (TensorRT FP16, 입력 1×3×256×128, 출력 512D)
 - 추출 주기: 선택 대상을 추적하거나 잃어버린 후보를 비교할 때 0.5초 간격
 - 역할 전환: BoT-SORT ID 유실 후 기본 1초 동안은 단기 재연결을 기다린 뒤 OSNet 검색
-- 갤러리: 정규화된 특징 최대 10개, 이미지 저장 없음
+- 갤러리: 정규화된 특징 최대 20개, 이미지 저장 없음
+- 저장 제외: 화면 경계에 닿아 잘렸거나 다른 사람과 50% 이상 겹친 인물 Crop
 - 재연결: 코사인 유사도 0.85 이상, 차순위보다 0.06 이상 높고 2회 연속 일치
 - 유효 시간: 대상 유실 후 60초
 
@@ -26,3 +27,4 @@ ONNX CPU 또는 다른 OSNet 모델로 자동 폴백하지 않습니다. 엔진 
 `VISION_REID_TIMEOUT`, 역할 전환 지연은 `VISION_REID_LONG_TERM_DELAY` 환경 변수로
 조정할 수 있습니다. 실시간 ID 검증 임계값과 연속 횟수는 각각
 `VISION_REID_GUARD_THRESHOLD`, `VISION_REID_MISMATCH_SAMPLES`로 조정합니다.
+심한 겹침 판정값은 `VISION_REID_GALLERY_OVERLAP_THRESHOLD`로 조정합니다.

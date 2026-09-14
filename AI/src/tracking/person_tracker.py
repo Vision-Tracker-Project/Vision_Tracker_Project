@@ -48,7 +48,7 @@ class PersonTracker:
                  head_release_band=(0.28, 0.36),
                  reid_interval=0.5, reid_confirm_samples=2,
                  long_reid_delay=1.0, reid_guard_threshold=0.75,
-                 reid_mismatch_samples=2,
+                 reid_mismatch_samples=2, gallery_overlap_threshold=0.5,
                  predictive_pan_duration=0.8, predictive_pan_max_degrees=15.0,
                  predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
                  predictive_motion_window=0.35, clock=None):
@@ -72,6 +72,9 @@ class PersonTracker:
             self._reid_threshold, max(-1.0, float(reid_guard_threshold))
         )
         self._reid_mismatch_samples = max(1, int(reid_mismatch_samples))
+        self._gallery_overlap_threshold = min(
+            1.0, max(0.0, float(gallery_overlap_threshold))
+        )
         self._next_reid = 0.0
         self._pending_id = None
         self._pending_count = 0
@@ -294,7 +297,8 @@ class PersonTracker:
                 self._reset_prediction()
             descriptor = descriptors.get(target.tracker_id)
             similarity = self.reidentifier.similarity(descriptor)
-            if descriptor_trusted:
+            if (descriptor_trusted and
+                    self._is_gallery_sample_eligible(target, detections, frame_size)):
                 self.reidentifier.remember(descriptor)
             self._was_lost = False
             self._lost_since = None
@@ -378,6 +382,36 @@ class PersonTracker:
         self._identities.assign(detections)
         self.best_candidate_id = self._selected_id
         return target, descriptor
+
+    def _is_gallery_sample_eligible(self, target, detections, frame_size):
+        """Reject clipped or heavily occluded crops from the OSNet gallery."""
+        frame_width, frame_height = frame_size
+        x, y, width, height = target.box
+        if (x <= 0 or y <= 0 or x + width >= frame_width - 1 or
+                y + height >= frame_height - 1):
+            return False
+
+        target_area = max(0, width) * max(0, height)
+        if target_area <= 0:
+            return False
+        target_right, target_bottom = x + width, y + height
+        for person in detections:
+            if person.tracker_id == target.tracker_id:
+                continue
+            other_x, other_y, other_width, other_height = person.box
+            intersection_width = max(
+                0, min(target_right, other_x + other_width) - max(x, other_x)
+            )
+            intersection_height = max(
+                0, min(target_bottom, other_y + other_height) - max(y, other_y)
+            )
+            intersection = intersection_width * intersection_height
+            other_area = max(0, other_width) * max(0, other_height)
+            smaller_area = min(target_area, other_area)
+            if (intersection > 0 and smaller_area > 0 and
+                    intersection / smaller_area >= self._gallery_overlap_threshold):
+                return False
+        return True
 
     def _record_motion(self, now, center, horizontal_bounds, frame_width, target):
         self._motion_history.append((
@@ -573,6 +607,7 @@ class PersonTracker:
                 "reid_threshold": self._reid_threshold,
                 "reid_guard_threshold": self._reid_guard_threshold,
                 "reid_mismatch_count": self._mismatch_count,
+                "reid_gallery_overlap_threshold": self._gallery_overlap_threshold,
                 "reid_ms": self.reidentifier.elapsed_ms,
             }
 

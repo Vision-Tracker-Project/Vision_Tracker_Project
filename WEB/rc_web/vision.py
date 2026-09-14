@@ -53,6 +53,7 @@ class VisionService:
                 long_reid_delay=c.PERSON_REID_LONG_TERM_DELAY_SECONDS,
                 reid_guard_threshold=c.PERSON_REID_GUARD_THRESHOLD,
                 reid_mismatch_samples=c.PERSON_REID_MISMATCH_SAMPLES,
+                gallery_overlap_threshold=c.PERSON_REID_GALLERY_OVERLAP_THRESHOLD,
                 pan_initial=c.PAN_INITIAL_ANGLE, tilt_initial=c.TILT_INITIAL_ANGLE,
                 pan_range=(c.PAN_MIN_ANGLE, c.PAN_MAX_ANGLE), tilt_range=(c.TILT_MIN_ANGLE, c.TILT_MAX_ANGLE),
                 filter_alpha=c.TRACKING_FILTER_ALPHA,
