@@ -58,7 +58,9 @@ class OSNetTest(unittest.TestCase):
     @patch('src.tracking.person_tracker.time.monotonic', return_value=100)
     def test_ambiguous_candidates_are_not_reconnected(self, clock):
         reid = self.make_reid()
-        tracker = PersonTracker(reid, lost_timeout=60, reid_interval=0)
+        tracker = PersonTracker(
+            reid, lost_timeout=60, reid_interval=0, long_reid_delay=0
+        )
         frame = np.zeros((80, 40, 3), np.uint8)
         p = lambda i: PersonDetection(i, (0, 0, 40, 80), 0.9)
         tracker.update([p(1)], frame, (40, 80))

@@ -47,7 +47,8 @@ class PersonTracker:
                  head_box_ratio=0.10, head_start_band=(0.22, 0.42),
                  head_release_band=(0.28, 0.36),
                  reid_interval=0.5, reid_confirm_samples=2,
-                 long_reid_delay=1.0,
+                 long_reid_delay=1.0, reid_guard_threshold=0.75,
+                 reid_mismatch_samples=2,
                  predictive_pan_duration=0.8, predictive_pan_max_degrees=15.0,
                  predictive_pan_min_speed=0.25, predictive_pan_edge_margin=0.15,
                  predictive_motion_window=0.35, clock=None):
@@ -67,9 +68,14 @@ class PersonTracker:
         self._reid_interval = max(0.0, reid_interval)
         self._reid_confirm_samples = max(1, reid_confirm_samples)
         self._long_reid_delay = max(0.0, float(long_reid_delay))
+        self._reid_guard_threshold = min(
+            self._reid_threshold, max(-1.0, float(reid_guard_threshold))
+        )
+        self._reid_mismatch_samples = max(1, int(reid_mismatch_samples))
         self._next_reid = 0.0
         self._pending_id = None
         self._pending_count = 0
+        self._mismatch_count = 0
         self._was_lost = False
         self._box_history = deque(maxlen=max(1, int(box_history_size)))
         common_confirm = max(1, int(boundary_confirm_frames))
@@ -143,6 +149,7 @@ class PersonTracker:
             self._next_reid = 0.0
             self._pending_id = None
             self._pending_count = 0
+            self._mismatch_count = 0
             self._was_lost = False
             self.state = "추적 중"
             return target.track_id
@@ -158,6 +165,7 @@ class PersonTracker:
             self._next_reid = 0.0
             self._pending_id = None
             self._pending_count = 0
+            self._mismatch_count = 0
             self._was_lost = False
             self.state = "선택 대기"
             self.best_candidate_id = None
@@ -195,8 +203,9 @@ class PersonTracker:
                 self._lost_since = self._last_seen if self._last_seen is not None else now
                 self._was_lost = True
                 self._start_pan_prediction(now)
-            long_reid_ready = (target is not None or self._lost_since is not None
-                               and now - self._lost_since >= self._long_reid_delay)
+            long_reid_ready = (target is not None or
+                               (self._lost_since is not None and
+                                now - self._lost_since >= self._long_reid_delay))
             comparison_due = long_reid_ready and now >= self._next_reid
             if comparison_due:
                 candidates = [target] if target is not None else detections
@@ -207,7 +216,33 @@ class PersonTracker:
                     person.reid_similarity = self.reidentifier.similarity(
                         descriptors.get(person.tracker_id)
                     )
-            tracking_state = "추적 중"
+            tracking_state = "ID 검증 중" if self._mismatch_count else "추적 중"
+            descriptor_trusted = not self._mismatch_count
+            if target is not None and comparison_due and self.reidentifier.samples:
+                target_similarity = target.reid_similarity
+                if (target_similarity is None or
+                        target_similarity < self._reid_guard_threshold):
+                    self._mismatch_count += 1
+                    descriptor_trusted = False
+                    tracking_state = "ID 검증 중"
+                    if self._mismatch_count >= self._reid_mismatch_samples:
+                        recovered = self._recover_identity_swap(
+                            detections, frame, descriptors
+                        )
+                        if recovered is None:
+                            self.state = "ID 교환 의심 · 재검색 중"
+                            self._reset_motion()
+                            return None
+                        target, descriptor = recovered
+                        descriptors[target.tracker_id] = descriptor
+                        descriptor_trusted = True
+                        tracking_state = "OSNet ID 교정"
+                        self._mismatch_count = 0
+                        self._reset_motion(target.box)
+                        self._reset_prediction()
+                else:
+                    self._mismatch_count = 0
+                    descriptor_trusted = True
             if target is None:
                 ranked = sorted(
                     ((item.reid_similarity, item) for item in detections
@@ -236,7 +271,9 @@ class PersonTracker:
                     target = ranked[0][1]
                     self._identities.rebind(self._selected_id, target.tracker_id)
                     self._selected_tracker_id = target.tracker_id
-                    target.track_id = self._selected_id
+                    self._identities.assign(detections)
+                    descriptor_trusted = True
+                    self._mismatch_count = 0
                     tracking_state = "ReID 재연결"
                     self._reset_motion(target.box)
                     self._reset_prediction()
@@ -257,13 +294,15 @@ class PersonTracker:
                 self._reset_prediction()
             descriptor = descriptors.get(target.tracker_id)
             similarity = self.reidentifier.similarity(descriptor)
-            self.reidentifier.remember(descriptor)
+            if descriptor_trusted:
+                self.reidentifier.remember(descriptor)
             self._was_lost = False
             self._lost_since = None
             self._pending_id = None
             self._pending_count = 0
             target.reid_similarity = similarity
-            self._last_seen = now
+            if descriptor_trusted:
+                self._last_seen = now
             self.best_candidate_id = target.track_id
             self.best_similarity = similarity
             self.state = tracking_state
@@ -308,6 +347,37 @@ class PersonTracker:
                 self._tilt = self._next_angle(self._tilt, error_y, self._tilt_sign, self._tilt_min, self._tilt_max)
             return PersonTrackingResult(filtered, *self.angles, self.angles != previous,
                                         target, aim_source, tracking_state, similarity)
+
+    def _recover_identity_swap(self, detections, frame, descriptors):
+        """Use the clean OSNet gallery to correct a live BoT-SORT ID swap."""
+        for person in detections:
+            if person.tracker_id < 0 or person.tracker_id in descriptors:
+                continue
+            descriptors[person.tracker_id] = self.reidentifier.extract(frame, person)
+        ranked = []
+        for person in detections:
+            similarity = self.reidentifier.similarity(descriptors.get(person.tracker_id))
+            person.reid_similarity = similarity
+            if similarity is not None:
+                ranked.append((similarity, person))
+        ranked.sort(key=lambda pair: pair[0], reverse=True)
+        self.best_similarity = ranked[0][0] if ranked else None
+        self.best_candidate_id = ranked[0][1].track_id if ranked else None
+        second = ranked[1][0] if len(ranked) > 1 else 0.0
+        if (not ranked or ranked[0][0] < self._reid_threshold or
+                ranked[0][0] - second < self._reid_margin or
+                ranked[0][1].tracker_id == self._selected_tracker_id):
+            return None
+
+        target = ranked[0][1]
+        descriptor = descriptors.get(target.tracker_id)
+        self._identities.rebind(self._selected_id, target.tracker_id)
+        self._selected_tracker_id = target.tracker_id
+        # Re-assign every current box. The old tracker and the recovered tracker
+        # both carried the selected public ID earlier in this same frame.
+        self._identities.assign(detections)
+        self.best_candidate_id = self._selected_id
+        return target, descriptor
 
     def _record_motion(self, now, center, horizontal_bounds, frame_width, target):
         self._motion_history.append((
@@ -493,6 +563,7 @@ class PersonTracker:
         with self._lock:
             return {
                 "selected_id": self._selected_id,
+                "selected_tracker_id": self._selected_tracker_id,
                 "state": self.state,
                 "reid_method": self.reidentifier.method,
                 "reid_backend": getattr(self.reidentifier, "backend", None),
@@ -500,6 +571,8 @@ class PersonTracker:
                 "reid_similarity": self.best_similarity,
                 "reid_candidate_id": self.best_candidate_id,
                 "reid_threshold": self._reid_threshold,
+                "reid_guard_threshold": self._reid_guard_threshold,
+                "reid_mismatch_count": self._mismatch_count,
                 "reid_ms": self.reidentifier.elapsed_ms,
             }
 
