@@ -1,0 +1,11 @@
+{
+  "device": {"name": "Microsoft X-Box 360 pad"},
+  "buttons": {},
+  "settings": {
+    "speeds": [80, 90, 100],
+    "initial": 0,
+    "inner_ratio": 0.8,
+    "spin_limit": 80,
+    "diagonal_outer": 100
+  }
+}

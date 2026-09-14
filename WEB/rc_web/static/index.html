@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1726">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Vision Tracker">
+  <meta name="description" content="Jetson 사람 추적과 게임패드 차량 상태">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vision.js" defer></script>
+  <title>Jetson Vision Tracker</title>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">JETSON VISION TRACKER</p><h1>사람 추적 · 차량 제어</h1></div>
+      <span id="connection" class="badge" role="status">연결 확인 중</span>
+    </header>
+
+    <section class="card vision-panel">
+      <h2>카메라 · 사람 검출 / ReID</h2>
+      <canvas id="video" width="640" height="480" aria-label="추적할 사람을 선택하는 카메라 화면"></canvas>
+      <p class="target-help">화면에서 추적할 사람을 누르세요. 빈 곳을 누르면 선택이 해제됩니다.</p>
+      <p id="vision-status" role="status">카메라 상태 확인 중</p>
+      <div class="vision-actions">
+        <select id="vision-mode" aria-label="카메라 모드">
+          <option value="ai">YOLO Person + ReID 영상</option>
+          <option value="raw">JPEG 영상 (AI 끔)</option>
+          <option value="camera">카메라만 (기준 FPS, 영상 없음)</option>
+        </select>
+        <button id="camera-on">카메라 ON</button><button id="camera-off">카메라 OFF</button>
+        <button id="tracking-toggle">팬·틸트 시작</button><button id="target-clear">대상 선택 해제</button>
+        <button id="capture-frame">현재 화면 PNG 저장</button>
+      </div>
+      <p id="vision-metrics">FPS 측정 대기</p>
+      <p id="people-list" class="target-help">검출 인물 없음</p>
+      <dl class="vision-detail">
+        <div><dt>선택 대상</dt><dd id="target-id">선택 안 됨</dd></div>
+        <div><dt>추적 상태</dt><dd id="target-state">선택 대기</dd></div>
+        <div><dt>사람 검출</dt><dd id="detector-detail">대기</dd></div>
+        <div><dt>ReID 유사도</dt><dd id="reid-similarity">—</dd></div>
+        <div><dt>ReID 프로필</dt><dd id="reid-profile">0장</dd></div>
+        <div><dt>ReID 방식</dt><dd id="reid-method">—</dd></div>
+      </dl>
+      <button id="benchmark">30초 수신 측정</button><pre id="benchmark-result"></pre>
+      <p class="hint">대상 검출은 계속 실행됩니다. 팬·틸트 시작은 선택 대상의 UART 제어만 활성화합니다.</p>
+    </section>
+
+    <section id="controller-panel" class="card controller-panel" aria-labelledby="controller-title">
+      <div class="section-heading">
+        <h2 id="controller-title">게임패드 · RC 차량</h2>
+        <span id="controller-connection" class="state-chip">입력 장치 대기</span>
+      </div>
+      <div class="controller-grid">
+        <div class="stick-wrap">
+          <div id="controller-stick" class="controller-stick" aria-label="게임패드 방향 입력">
+            <span class="stick-axis horizontal"></span><span class="stick-axis vertical"></span>
+            <span id="stick-dot" class="stick-dot"></span>
+          </div>
+          <strong id="controller-direction">정지</strong>
+          <span id="controller-axes" class="subtle">X 0 · Y 0</span>
+        </div>
+        <div class="motor-output">
+          <div class="motor-row"><span>왼쪽 모터</span><div class="motor-track"><i id="left-motor-bar"></i></div><strong id="left-motor">0</strong></div>
+          <div class="motor-row"><span>오른쪽 모터</span><div class="motor-track"><i id="right-motor-bar"></i></div><strong id="right-motor">0</strong></div>
+          <p class="motor-help"><span class="forward-key"></span>전진 <span class="reverse-key"></span>후진 · 출력 범위 -100~100</p>
+        </div>
+      </div>
+      <dl class="controller-detail">
+        <div><dt>주행 허용</dt><dd id="controller-armed">잠김</dd></div>
+        <div><dt>Enable 버튼</dt><dd id="controller-enable">놓음</dd></div>
+        <div><dt>정지 버튼</dt><dd id="controller-stop">놓음</dd></div>
+        <div><dt>속도 단계</dt><dd id="controller-speed">—</dd></div>
+      </dl>
+      <p id="controller-reason" class="hint">게임패드 상태 확인 중</p>
+    </section>
+    <footer>차량 조작은 Jetson에 연결된 USB 게임패드에서만 수행됩니다.</footer>
+    <noscript>실시간 상태를 보려면 JavaScript를 활성화하세요.</noscript>
+  </main>
+</body>
+</html>

@@ -1,5 +1,5 @@
-"""얼굴 중심 기반 팬·틸트 추적 모듈."""
+"""사람 선택과 팬·틸트 추적 모듈."""
 
-from .face_tracker import FaceTracker, TrackingResult
+from .person_tracker import PersonTracker, PersonTrackingResult
 
-__all__ = ["FaceTracker", "TrackingResult"]
+__all__ = ["PersonTracker", "PersonTrackingResult"]

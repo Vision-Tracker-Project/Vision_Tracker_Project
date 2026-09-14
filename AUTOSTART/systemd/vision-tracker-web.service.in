@@ -1,0 +1,32 @@
+[Unit]
+Description=Vision Tracker camera, pan-tilt and gamepad vehicle controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+SupplementaryGroups=input dialout
+WorkingDirectory=@PROJECT_ROOT@/AI
+ExecStart=@PYTHON_BIN@ @PROJECT_ROOT@/AI/main.py --gamepad --device @GAMEPAD_DEVICE@ --config @GAMEPAD_CONFIG@ --uart @UART_DEVICE@
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=VISION_AUTOSTART_CAMERA=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# USB 카메라, evdev 게임패드 및 STM32 UART에 실제 /dev 접근이 필요하다.
+PrivateDevices=false
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
