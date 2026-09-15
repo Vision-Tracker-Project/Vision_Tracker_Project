@@ -1,0 +1,10 @@
+# Jetson runtime dependencies. TensorRT and PyCUDA are supplied by JetPack.
+numpy>=1.23,<2
+opencv-python>=4.8,<4.12
+pyserial>=3.5
+evdev>=1.6; sys_platform == "linux"
+ultralytics>=8.4.130,<8.5
+lap>=0.5.12
+fastapi>=0.115,<1
+pydantic>=2.7,<3
+uvicorn>=0.30,<1
