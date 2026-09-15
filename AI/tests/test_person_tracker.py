@@ -13,7 +13,7 @@ class FakeReIdentifier:
     method = "test descriptor"
 
     def __init__(self):
-        self.gallery = deque(maxlen=10)
+        self.gallery = deque(maxlen=20)
         self.elapsed_ms = 0.0
 
     @property
@@ -34,6 +34,17 @@ class FakeReIdentifier:
         if descriptor is None:
             return None
         return max((float(np.dot(item, descriptor)) for item in self.gallery), default=None)
+
+
+class MutableReIdentifier(FakeReIdentifier):
+    """Return a controllable OSNet-like descriptor for each BoT-SORT ID."""
+
+    def __init__(self, features):
+        super().__init__()
+        self.features = features
+
+    def extract(self, frame, detection):
+        return self.features[detection.tracker_id].copy()
 
 
 def person(track_id, box=(10, 10, 40, 80)):
@@ -62,6 +73,81 @@ class PersonTrackerTest(unittest.TestCase):
         self.tracker.select_at(0.2, 0.3)
         result = self.tracker.update(detections, self.frame, (160, 120), move_servos=False)
         self.assertEqual(result.target.track_id, 3)
+
+    def test_live_id_swap_is_corrected_without_gallery_contamination(self):
+        identity_a = np.array([1.0, 0.0], np.float32)
+        identity_b = np.array([0.0, 1.0], np.float32)
+        reidentifier = MutableReIdentifier({1: identity_a, 2: identity_b})
+        tracker = PersonTracker(
+            reidentifier, reid_interval=0, reid_threshold=0.8,
+            reid_guard_threshold=0.6, reid_mismatch_samples=2,
+        )
+        before = [person(1), person(2, (90, 10, 40, 80))]
+        tracker.update(before, self.frame, (160, 120), move_servos=False)
+        tracker.select_at(0.2, 0.3)
+        tracker.update(before, self.frame, (160, 120), move_servos=False)
+        self.assertEqual(len(reidentifier.gallery), 1)
+
+        # BoT-SORT IDs remain alive but have switched from one person to the other.
+        reidentifier.features = {1: identity_b, 2: identity_a}
+        first_check = [person(1), person(2, (90, 10, 40, 80))]
+        result = tracker.update(first_check, self.frame, (160, 120), move_servos=False)
+        self.assertEqual(result.state, "ID 검증 중")
+        self.assertEqual(len(reidentifier.gallery), 1)
+
+        second_check = [person(1), person(2, (90, 10, 40, 80))]
+        result = tracker.update(second_check, self.frame, (160, 120), move_servos=False)
+        self.assertEqual(result.state, "OSNet ID 교정")
+        self.assertEqual(result.target.tracker_id, 2)
+        self.assertEqual(result.target.track_id, 1)
+        self.assertEqual(tracker.selected_id, 1)
+        self.assertEqual(len({item.track_id for item in second_check}), 2)
+        self.assertTrue(all(np.dot(saved, identity_a) > 0.99
+                            for saved in reidentifier.gallery))
+
+    def test_suspected_swap_stops_instead_of_learning_wrong_person(self):
+        identity_a = np.array([1.0, 0.0], np.float32)
+        identity_b = np.array([0.0, 1.0], np.float32)
+        reidentifier = MutableReIdentifier({1: identity_a})
+        tracker = PersonTracker(
+            reidentifier, reid_interval=0, reid_threshold=0.8,
+            reid_guard_threshold=0.6, reid_mismatch_samples=2,
+        )
+        original = [person(1)]
+        tracker.update(original, self.frame, (160, 120), move_servos=False)
+        tracker.select_at(0.2, 0.3)
+        tracker.update(original, self.frame, (160, 120), move_servos=False)
+
+        reidentifier.features = {1: identity_b}
+        tracker.update([person(1)], self.frame, (160, 120), move_servos=False)
+        self.assertIsNone(tracker.update(
+            [person(1)], self.frame, (160, 120), move_servos=False
+        ))
+        self.assertEqual(tracker.state, "ID 교환 의심 · 재검색 중")
+        self.assertEqual(len(reidentifier.gallery), 1)
+        self.assertGreater(np.dot(reidentifier.gallery[0], identity_a), 0.99)
+
+    def test_clipped_and_heavily_overlapped_boxes_are_not_remembered(self):
+        reidentifier = FakeReIdentifier()
+        tracker = PersonTracker(
+            reidentifier, reid_interval=0, gallery_overlap_threshold=0.5
+        )
+        clipped = person(1, (0, 10, 40, 80))
+        tracker.update([clipped], self.frame, (160, 120), move_servos=False)
+        tracker.select_at(0.1, 0.3)
+        tracker.update([clipped], self.frame, (160, 120), move_servos=False)
+        self.assertEqual(len(reidentifier.gallery), 0)
+
+        target = person(1, (10, 10, 40, 80))
+        overlapping = person(2, (20, 20, 40, 80))
+        tracker.update(
+            [target, overlapping], self.frame, (160, 120), move_servos=False
+        )
+        self.assertEqual(len(reidentifier.gallery), 0)
+
+        separated = person(2, (90, 20, 40, 80))
+        tracker.update([target, separated], self.frame, (160, 120), move_servos=False)
+        self.assertEqual(len(reidentifier.gallery), 1)
 
     def test_blank_point_clears_selection(self):
         detections = [person(3)]

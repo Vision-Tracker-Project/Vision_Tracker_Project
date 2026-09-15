@@ -35,6 +35,43 @@ class _NumpyBoxes:
         return _NumpyBoxes(self.xyxy[item], self.conf[item])
 
 
+class _BoTSORTAppearanceEncoder:
+    """BoT-SORT short-term ReID features without another neural-network pass."""
+
+    def __call__(self, frame, boxes):
+        height, width = frame.shape[:2]
+        features = []
+        for center_x, center_y, box_width, box_height, *_ in np.asarray(boxes):
+            x1 = max(0, round(center_x - box_width / 2))
+            y1 = max(0, round(center_y - box_height / 2))
+            x2 = min(width, round(center_x + box_width / 2))
+            y2 = min(height, round(center_y + box_height / 2))
+            crop = frame[y1:y2, x1:x2]
+            features.append(self._feature(crop))
+        return features
+
+    @staticmethod
+    def _feature(crop):
+        # Hue/saturation survives modest lighting changes; edge orientation helps
+        # when two people wear similarly coloured clothes.
+        if crop.size == 0:
+            return np.zeros(137, dtype=np.float32)
+        resized = cv2.resize(crop, (48, 96), interpolation=cv2.INTER_AREA)
+        hsv = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
+        color = cv2.calcHist([hsv], [0, 1], None, [16, 8], [0, 180, 0, 256]).reshape(-1)
+        color /= max(float(np.linalg.norm(color)), 1e-12)
+        gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        grad_x = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        magnitude, angle = cv2.cartToPolar(grad_x, grad_y, angleInDegrees=True)
+        texture, _ = np.histogram(angle, bins=9, range=(0, 360), weights=magnitude)
+        texture = texture.astype(np.float32)
+        texture /= max(float(np.linalg.norm(texture)), 1e-12)
+        feature = np.concatenate((0.8 * color, 0.2 * texture))
+        norm = float(np.linalg.norm(feature))
+        return feature / norm if norm > 1e-12 else feature
+
+
 class _TensorRTDetectorBackend:
     """CUDA PyTorch 없이 class 0 전용 TensorRT 엔진을 직접 실행한다."""
 
@@ -132,6 +169,13 @@ class PersonDetection:
     box: Tuple[int, int, int, int]
     confidence: float
     reid_similarity: Optional[float] = None
+    tracker_id: Optional[int] = None
+
+    def __post_init__(self):
+        # `tracker_id` is owned by BoT-SORT. `track_id` may later be replaced by
+        # the stable public identity assigned by PersonTracker.
+        if self.tracker_id is None:
+            self.tracker_id = self.track_id
 
 
 class PersonDetector:
@@ -146,13 +190,20 @@ class PersonDetector:
         try:
             from ultralytics.trackers.bot_sort import BOTSORT
             self.model = _TensorRTDetectorBackend(path)
-            self.byte_tracker = BOTSORT(SimpleNamespace(
+            tracker_args = SimpleNamespace(
                 track_high_thresh=0.25, track_low_thresh=0.1,
                 new_track_thresh=0.25, track_buffer=30,
                 match_thresh=0.8, fuse_score=True,
                 gmc_method="sparseOptFlow", with_reid=False,
                 proximity_thresh=0.5, appearance_thresh=0.8, model="auto",
-            ))
+            )
+            self.byte_tracker = BOTSORT(tracker_args)
+            # The direct TensorRT detector has no YOLO backbone features to pass
+            # to model="auto". Attach a light local encoder to BoT-SORT's own
+            # appearance-association path instead.
+            self.byte_tracker.args.with_reid = True
+            self.byte_tracker.args.model = "internal-appearance"
+            self.byte_tracker.encoder = _BoTSORTAppearanceEncoder()
         except Exception as error:
             raise PersonDetectorError(f"사람 검출 모델 로드 실패: {error}") from error
         self.confidence = confidence
@@ -201,6 +252,7 @@ class PersonDetector:
             box=(round(track[0]), round(track[1]),
                  max(1, round(track[2]-track[0])), max(1, round(track[3]-track[1]))),
             confidence=float(track[5]),
+            tracker_id=int(track[4]),
         ) for track in tracks]
 
     def close(self):
