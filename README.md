@@ -6,6 +6,10 @@
 
 ![Vision Tracking 프로젝트 실물](docs/images/presentation/slide-04.png)
 
+## 팀원 소개 — 수화
+
+![팀원 및 역할 분담](docs/images/presentation/slide-03.png)
+
 ## 팀 소개 — 수화
 
 저희 팀은 처음에는 MediaPipe를 활용한 **수화 인식 프로젝트**를 기획했습니다. 손의 랜드마크를 인식하고, 이를 Ollama와 연계해 수화를 해석하는 방향이었습니다.
@@ -13,8 +17,6 @@
 기획 과정에서 AI 디바이스의 인식 결과를 실제 하드웨어의 움직임으로 연결하는 시스템을 만들어 보자는 의견이 나왔습니다. 당시 팀원 모두 카메라 기반 객체 추적 시스템을 깊게 다뤄 본 경험이 없었기에, 새로운 분야에 직접 도전하자는 의미로 프로젝트 주제를 변경했습니다.
 
 ![수화 인식 기획과 프로젝트 주제 전환](docs/images/presentation/slide-05.png)
-
-![팀원 및 역할 분담](docs/images/presentation/slide-03.png)
 
 ## Why this Project?
 
