@@ -34,13 +34,13 @@
 
 ![전체 시스템 처리 흐름도](docs/images/presentation/slide-08.png)
 
+## 하드웨어
+
 ![실물 하드웨어 구성](docs/images/presentation/slide-09.png)
 
 ![시스템 아키텍처](docs/images/presentation/slide-10.png)
 
 ![시스템 블록 다이어그램](docs/images/presentation/slide-11.png)
-
-## 하드웨어
 
 ![주요 부품 목록](docs/images/presentation/slide-13.png)
 
