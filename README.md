@@ -84,8 +84,4 @@
 
 ## 시연영상
 
-약 51초 분량의 실제 동작 영상입니다. 아래 이미지를 클릭하면 영상을 열 수 있습니다.
-
-[![Vision Tracking 실제 동작 시연영상](docs/images/demo-preview.jpg)](https://raw.githubusercontent.com/Vision-Tracker-Project/Vision_Tracker_Project/main/docs/videos/vision-tracking-demo.mp4)
-
-[▶ 시연영상 재생](https://raw.githubusercontent.com/Vision-Tracker-Project/Vision_Tracker_Project/main/docs/videos/vision-tracking-demo.mp4) · [MP4 원본 파일](docs/videos/vision-tracking-demo.mp4)
+https://github.com/user-attachments/assets/e23b8202-c126-4254-a741-647ff3460128
