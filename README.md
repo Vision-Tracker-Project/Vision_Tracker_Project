@@ -85,3 +85,7 @@
 ## 시연영상
 
 https://github.com/user-attachments/assets/e00c0b1b-7b70-4e3e-86d6-873169e514bc
+
+## 시연영상2
+
+https://github.com/user-attachments/assets/276c0e29-8760-4cc3-a90a-ae28511a2a87
